@@ -7,3 +7,7 @@ pom.xml.asc
 *.class
 /.lein-*
 /.nrepl-port
+secret.key
+/training
+/arena
+*~
