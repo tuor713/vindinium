@@ -32,12 +32,6 @@
    :playUrl "http://vindinium.org/api/a2uvsc6n/lcjk/play"})
 (def sample-game (:game sample-state))
 
-(deftest test-state-accessors
-  (is (= [0 2] (state->hero-pos sample-state 1)))
-  (is (= [0 2] (state->own-pos sample-state))))
-
-
-
 
 (let [g {:heroes {1 {:pos [0 2] :spawnPos [0 0] :life 15 :gold 10 :mineCount 2}
                   2 {:pos [1 1] :spawnPos [2 0] :life 60 :gold 10 :mineCount 0}
