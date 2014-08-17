@@ -1,5 +1,7 @@
 Vindinium Clojure bot (powering malvert)
 
+See also [blog writeup](http://tuor713.github.io/vindinium/index.html).
+
 ## Strategies
 
 The agent uses a heuristic approach combining a couple of weighted behavioural traits:
