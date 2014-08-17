@@ -5,6 +5,9 @@
 
 ;; agents
 
+;; the simplest fallback
+(defn rand-move [] (rand-nth ["north" "south" "east" "west" "stay"])) 
+
 (defn heuristic-agent [& heuristics]
   (fn [input]
     (let [candidates
@@ -38,22 +41,6 @@
       choice)))
 
 
-;; state management
-
-(defn game->board [input] (get-in input [:board]))
-(defn state->board [input] (get-in input [:game :board]))
-
-(defn game->hero [input id] (get-in input [:heroes id]))
-(defn state->hero [input id] (get-in input [:game :heroes id]))
-
-(defn game->hero-pos [game id] (:pos (game->hero game id)))
-(defn state->hero-pos [input id] (game->hero-pos (:game input) id))
-
-(defn state->own-hero-id [input] (get-in input [:hero :id]))
-(defn state->own-pos [input]
-  (state->hero-pos input (state->own-hero-id input)))
-
-
 ;; movement
 
 (def moves 
@@ -84,13 +71,7 @@
 (defn valid-moves [board pos]
   (filter (partial valid-move? board pos) [:north :south :east :west]))
 
-;; heuristics - random movers 
 
-(defn rand-move [] (rand-nth ["north" "south" "east" "west" "stay"])) 
-
-(defn rand-valid-move [input]
-  (rand-nth (valid-moves (state->board input)
-                         (state->own-pos input))))
 
 (defn adjacent? [board pos otherpos]
   (some #{otherpos} (map #(pos+ pos %) real-moves)))
@@ -125,10 +106,15 @@
 (defn hero-death [game hero vanquisher]
   (let [vf (if (nil? vanquisher)
              identity
-             #(update-in % [:heroes vanquisher :mineCount] (partial + (:mineCount (game->hero game hero)))))
-        h (game->hero game hero)]
+             #(update-in % [:heroes vanquisher :mineCount] (partial + (m/mine-count game hero))))
+        h (m/hero game hero)
+        on-spawn-pos (m/tile (m/board game) (m/spawn-pos game hero))
+        spawn-kill
+        (if (and (m/hero? on-spawn-pos) (not= (second on-spawn-pos) hero))
+          #(hero-death % (second on-spawn-pos) hero)
+          identity)
+        ]
     (-> game
-        ;; TODO handle spawning on other hero special case 
         (update-in [:heroes hero]
                    #(assoc % :life 100
                            :pos (:spawnPos %)
@@ -136,22 +122,25 @@
         (update-in [:board]
                    (fn [board]
                      (-> board
-                         (assoc-in (:pos h) :empty)
+                         ;; careful to update only if we are still hero, we could have been
+                         ;; removed by a spawn kill
+                         (update-in (:pos h) #(if (= % [:hero hero]) :empty %))
                          (assoc-in (:spawnPos h) [:hero hero]))))
         (vf)
         (update-in [:board] (fn [board] 
-                              (update-board board #(get {[:mine hero] [:mine vanquisher]} % %)))))))
+                              (update-board board #(get {[:mine hero] [:mine vanquisher]} % %))))
+        (spawn-kill))))
 
 (defn fight [game hero]
-  (let [[x y] (game->hero-pos game hero)]
+  (let [[x y] (m/pos game hero)]
     (reduce
      (fn [g dir]
        (let [[dx dy] (moves dir)
              [nx ny :as npos] [(+ x dx) (+ y dy)]
-             terrain (get-in (game->board game) npos)]
+             terrain (get-in (m/board game) npos)]
          (if (and (vector? terrain) (= :hero (first terrain)))
            (let [foe-id (second terrain)
-                 foe (game->hero game foe-id)]
+                 foe (m/hero game foe-id)]
              (if (<= (:life foe) 20)
                (hero-death g foe-id hero)
                (-> g
@@ -161,10 +150,9 @@
      [:north :south :west :east])))
 
 (defn move [game hero direction]
-  (let [[x y] (game->hero-pos game hero)
-        [dx dy] (moves direction)
-        [nx ny :as npos] [(+ x dx) (+ y dy)]
-        terrain (get-in (game->board game) npos)]
+  (let [[x y] (m/pos game hero)
+        [nx ny :as npos] (pos+ [x y] direction)
+        terrain (m/tile (m/board game) npos)]
     (when-not (or (nil? terrain) (= :wall terrain))
       (-> (cond
            (= :empty terrain)
@@ -186,13 +174,13 @@
            (and (= :mine (first terrain)) (= hero (second terrain)))
            game
 
-           (and (= :mine (first terrain)) (> (:life (game->hero game hero)) 20))
+           (and (= :mine (first terrain)) (> (:life (m/hero game hero)) 20))
            (-> game
                (assoc-in [:board nx ny] [:mine hero])
                (update-in [:heroes hero :life] #(- % 20))
                (update-in [:heroes hero :mineCount] inc))
 
-           (and (= :mine (first terrain)) (<= (:life (game->hero game hero)) 20))
+           (and (= :mine (first terrain)) (<= (:life (m/hero game hero)) 20))
            (hero-death game hero nil))
 
           (fight hero)
@@ -213,7 +201,7 @@
 ;; tree searching agents
 
 (defn score [game hero-id]
-  (let [hero (game->hero game hero-id)
+  (let [hero (m/hero game hero-id)
         score (+ (* 10 (:gold hero))
                  (* 200 (:mineCount hero))
                  (:life hero))]
@@ -229,7 +217,7 @@
 
 (defn autist-dfs-agent [depth]
   (fn [state]
-    (let [my-id (state->own-hero-id state)
+    (let [my-id (m/my-id state)
           game (:game state)
           game' (reduce remove-hero game (remove #{my-id} [1 2 3 4]))
           rated-options

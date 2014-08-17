@@ -54,6 +54,15 @@
       (is (nil? (move g 1 :east))
           "Moving into a wall"))
 
+    (let [g' (assoc-in g [:heroes 3 :spawnPos] [0 2])
+          g# (move g' 3 :north)]
+      (testing "spawning kill"
+        (is (= [0 2] (m/pos g# 3)))
+        (is (= [0 0] (m/pos g# 1)))
+        (is (= 2 (m/mine-count g# 3)))
+        (is (= 0 (m/mine-count g# 1)))
+        (is (= [:mine 3] (m/tile (m/board g#) [3 0])))))
+
     (testing "No-op behaviour"
       (let [g' (move g 1 :stay)]
         (is (= [0 2] (m/pos g' 1))
