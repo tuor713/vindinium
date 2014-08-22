@@ -9,16 +9,21 @@ http://vindinium.org/bvx6xpym -> some random deaths that should be preventable
 http://vindinium.org/u8sqpoeh -> non tavern behaviour
 http://vindinium.org/ge1ccdij -> foolish death after reaching tavern ...
 
-to add
-- if a tavern is blocked by an enemy, well then don't go there
+Additions
+> Combat
+- don't be afraid to into T+1 space if we can still win
+- ensure that fields adjacent to taverns are treated preferentially
 - finishing off an opponent i.e. moving into the bad +2 square because the life difference is big enough
-- avoid spawning spots and adjacent
-- combat if standing next to a tavern on one life go into it ...
-- could experiment with blacklisting taverns / mines that either
-  - cannot be reached (enemy blocking)
-  - lead to vicious cycles of death
+
+> Meta
 - learn from death i.e. avoid death spots ?
 - avoid traps i.e. don't go into places where you can be cut off completely, especially if an enemy is very near
+
+> Path finding
+- allow alternative equivalent paths to mines and taverns, to enable finer grain optimizations
+- without DFS based mining, we greedily optimize the first mine but that is not really right
+
+
 
 
 Have a private Arena for running games with test agents ...

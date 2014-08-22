@@ -38,7 +38,6 @@
 
 (def current-bot 
   (bot (heuristic-agent
-        (with-meta (autist-dfs-agent 7) {:label "autist-dfs" :weight 1})
         (with-meta (tavern-finder 30) {:label "tavern-finder" :weight 0.9})
         (with-meta (mine-finder 30) {:label "mine-finder" :weight 1})
         (with-meta combat-one-oh-one {:label "combat" :weight 300})

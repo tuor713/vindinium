@@ -33,10 +33,13 @@
                   heuristics))
           sum-weights
           (->> candidates
+               ;; seed the list so we always have options present at default value
+               (concat [[:north 0] [:south 0] [:west 0] [:east 0] [:stay 0]]) 
                (group-by first)
                (map (fn [[move ws]] [move (reduce + (map second ws))]))
                (shuffle))
-          choice (first (apply max-key second sum-weights))]
+          choice 
+          (first (apply max-key second sum-weights))]
       (println "heuristic sum =>" sum-weights "=>" choice)
       choice)))
 
@@ -203,8 +206,7 @@
 (defn score [game hero-id]
   (let [hero (m/hero game hero-id)
         score (+ (* 10 (:gold hero))
-                 (* 200 (:mineCount hero))
-                 (:life hero))]
+                 (* 200 (:mineCount hero)))]
     score))
 
 (defn max-score-dfs [game hero-id depth]
@@ -324,11 +326,27 @@
 (defn mine-finder [life-threshold]
   (fn [state]
     (let [id (m/my-id state)
-          game (:game state)]
-      (when-not (< (m/life game id) life-threshold)
-        (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
-              path (path-to-mine (m/board game) id blacklist  (m/pos game id))]
-          (when path (move->direction (m/pos game id) (second path))))))))
+          game (:game state)
+
+          adjacent-mines
+          (->> real-moves
+               (filter #(let [tile (m/tile (m/board game) 
+                                           (pos+ (m/pos game id) %))]
+                          (and (m/mine? tile)
+                               (not= [:mine id] tile)))))]
+      (cond
+       (and (seq adjacent-mines) (> (m/life game id) 20))
+       [[(first adjacent-mines) 2]]
+
+       ;; don't run into mines on low life bad move
+       (and (seq adjacent-mines) (<= (m/life game id) 20))
+       (map #(-> [% -100]) adjacent-mines)
+
+       :else 
+       (when-not (< (m/life game id) life-threshold)
+         (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+               path (path-to-mine (m/board game) id blacklist  (m/pos game id))]
+           (when path (move->direction (m/pos game id) (second path)))))))))
 
 
 
