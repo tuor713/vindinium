@@ -133,7 +133,35 @@
           [[:empty :empty :empty]
            [:empty :wall :empty]
            [:empty :wall :tavern]]
-          [0 0]))))
+          #{}
+          [0 0])))
+  (is (= [[0 0] [1 0] [2 0] [3 0] [3 1] [3 2] [3 3] [2 3] [1 3]]
+         (path-to-tavern 
+          [[:empty :empty :empty :hero]
+           [:empty :empty :empty :tavern]
+           [:empty :wall :wall :empty]
+           [:empty :empty :empty :empty]]
+          #{[0 2] [1 2]}
+          [0 0])))
+  (is (= :east
+         ((tavern-finder 100) 
+          {:game {:board
+                  [[:hero :empty :empty :empty]
+                   [:empty :wall :empty :tavern]
+                   [:empty :wall :wall :empty]
+                   [:empty :empty :empty :empty]]
+                  :heroes {1 {:id 1 :pos [0 0] :life 20}}}
+           :hero {:id 1}})))
+  (is (= :south
+         ((tavern-finder 100) 
+          {:game {:board
+                  [[:hero :empty :empty :hero]
+                   [:empty :wall :empty :tavern]
+                   [:empty :wall :wall :empty]
+                   [:empty :empty :empty :empty]]
+                  :heroes {1 {:id 1 :pos [0 0] :life 20}
+                           2 {:id 2 :pos [0 3] :life 100}}}
+           :hero {:id 1}}))))
 
 (deftest test-mine-finder
   (is (= [[0 0] [0 1] [0 2] [1 2] [2 2]]
@@ -142,6 +170,7 @@
            [:empty :wall :empty]
            [:empty :wall [:mine nil]]]
           1
+          #{}
           [0 0]))))
 
 (let [g {:heroes {1 {:pos [1 0] :spawnPos [0 0] :life 100 :gold 10 :mineCount 2 :id 1}
@@ -182,11 +211,11 @@
            (enemies-mod-map g 1)))
     
     (is (= [[:south 0.5] [:east -1] [:stay -1]]
-           (hero-one-oh-one 
+           (combat-one-oh-one 
             {:game g
              :hero {:id 1}})))
     (is (= [[:south 0.5]]
-           (hero-one-oh-one 
+           (combat-one-oh-one 
             {:game (assoc-in g [:heroes 1 :mineCount] 0)
              :hero {:id 1}})))))
 

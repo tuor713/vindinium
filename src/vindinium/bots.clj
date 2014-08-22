@@ -246,47 +246,6 @@
                      (into queue'
                            (map #(-> [% (conj p s)]) ns))))))))))
 
-(defn path-to-tavern [board starting]
-  (bfs starting
-       (fn [pos]
-         (neighbours board pos
-                     #(or (contains? #{nil :wall :hero} %)
-                           (m/mine? %))))
-       (fn [pos] (= :tavern (m/tile board pos)))))
-
-(defn tavern-finder [life-threshold]
-  (fn [state]
-    (let [id (m/my-id state)
-          game (m/game state)
-          adjacent-tavern 
-          (->> real-moves
-               (filter #(= :tavern
-                           (m/tile (m/board game) 
-                                   (pos+ (m/pos game id) %))))
-               (first))]
-      ;; if we are adjacent give a little push so we actually use it
-      (if (and adjacent-tavern (<= (m/life game id) 50))
-        [[adjacent-tavern 20]]
-        (when (<= (m/life game id) life-threshold)
-          (move->direction (m/pos game id) 
-                           (second (path-to-tavern (m/board game) (m/pos game id)))))))))
-
-(defn path-to-mine [board hero-id starting]
-  (bfs starting
-       (fn [pos]
-         (->> real-moves
-              (map #(pos+ pos %))
-              (remove #(contains? #{nil :wall :hero :tavern [:mine hero-id]} (m/tile board %)))))
-       (fn [pos] (m/mine? (m/tile board pos)))))
-
-(defn mine-finder [life-threshold]
-  (fn [state]
-    (let [id (m/my-id state)
-          game (:game state)]
-      (when-not (< (m/life game id) life-threshold)
-        (move->direction (m/pos game id) 
-                         (second (path-to-mine (m/board game) id (m/pos game id))))))))
-
 (defn enemy-mod-map [game my-life enemy]
   (let [enemy-pos (m/pos enemy)
         ns (neighbours (m/board game) enemy-pos)
@@ -323,6 +282,55 @@
          (remove #(= hero-id (m/id %)))
          (map #(enemy-mod-map game my-life %))
          (apply merge-with +))))
+
+(defn path-to-tavern [board blacklist starting]
+  (bfs starting
+       (fn [pos]
+         (->> real-moves 
+              (map #(pos+ pos %))
+              (remove #(let [tile (m/tile board %)]
+                         (or (contains? blacklist %) 
+                             (contains? #{nil :wall :hero} tile)
+                             (m/mine? tile))))))
+       (fn [pos] (= :tavern (m/tile board pos)))))
+
+(defn tavern-finder [life-threshold]
+  (fn [state]
+    (let [id (m/my-id state)
+          game (m/game state)
+          adjacent-tavern 
+          (->> real-moves
+               (filter #(= :tavern
+                           (m/tile (m/board game) 
+                                   (pos+ (m/pos game id) %))))
+               (first))]
+      ;; if we are adjacent give a little push so we actually use it
+      (if (and adjacent-tavern (<= (m/life game id) 75))
+        [[adjacent-tavern 20]]
+        (when (<= (m/life game id) life-threshold)
+          (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+                path (path-to-tavern (m/board game) blacklist (m/pos game id))]
+            (when path (move->direction (m/pos game id) (second path)))))))))
+
+(defn path-to-mine [board hero-id blacklist starting]
+  (bfs starting
+       (fn [pos]
+         (->> real-moves
+              (map #(pos+ pos %))
+              (remove #(or (contains? blacklist %)
+                           (contains? #{nil :wall :hero :tavern [:mine hero-id]} (m/tile board %))))))
+       (fn [pos] (m/mine? (m/tile board pos)))))
+
+(defn mine-finder [life-threshold]
+  (fn [state]
+    (let [id (m/my-id state)
+          game (:game state)]
+      (when-not (< (m/life game id) life-threshold)
+        (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+              path (path-to-mine (m/board game) id blacklist  (m/pos game id))]
+          (when path (move->direction (m/pos game id) (second path))))))))
+
+
 
 (defn combat-one-oh-one 
   "Basic close range combat:

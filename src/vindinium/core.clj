@@ -126,6 +126,7 @@
 (defn -main [& args]
   (match (vec args)
          ["training" nb] (training secret-key (Integer/parseInt nb))
-         ["arena" nb] (arena secret-key (Integer/parseInt nb))))
+         ["arena" nb] (arena secret-key (Integer/parseInt nb)))
+  (shutdown-agents))
 
 
