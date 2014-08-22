@@ -71,8 +71,6 @@
 (defn valid-moves [board pos]
   (filter (partial valid-move? board pos) [:north :south :east :west]))
 
-
-
 (defn adjacent? [board pos otherpos]
   (some #{otherpos} (map #(pos+ pos %) real-moves)))
 
@@ -103,7 +101,7 @@
     (fn [row] (vec (map f row)))
     board)))
 
-(defn hero-death [game hero vanquisher]
+(defn die [game hero vanquisher]
   (let [vf (if (nil? vanquisher)
              identity
              #(update-in % [:heroes vanquisher :mineCount] (partial + (m/mine-count game hero))))
@@ -111,7 +109,7 @@
         on-spawn-pos (m/tile (m/board game) (m/spawn-pos game hero))
         spawn-kill
         (if (and (m/hero? on-spawn-pos) (not= (second on-spawn-pos) hero))
-          #(hero-death % (second on-spawn-pos) hero)
+          #(die % (second on-spawn-pos) hero)
           identity)
         ]
     (-> game
@@ -142,7 +140,7 @@
            (let [foe-id (second terrain)
                  foe (m/hero game foe-id)]
              (if (<= (:life foe) 20)
-               (hero-death g foe-id hero)
+               (die g foe-id hero)
                (-> g
                    (update-in [:heroes foe-id :life] #(- % 20)))))
            g)))
@@ -155,6 +153,8 @@
         terrain (m/tile (m/board game) npos)]
     (when-not (or (nil? terrain) (= :wall terrain))
       (-> (cond
+           (or (nil? terrain) (= :wall terrain)) game
+
            (= :empty terrain)
            (-> game
                (assoc-in [:heroes hero :pos] npos)
@@ -181,7 +181,7 @@
                (update-in [:heroes hero :mineCount] inc))
 
            (and (= :mine (first terrain)) (<= (:life (m/hero game hero)) 20))
-           (hero-death game hero nil))
+           (die game hero nil))
 
           (fight hero)
 
@@ -257,7 +257,7 @@
 (defn tavern-finder [life-threshold]
   (fn [state]
     (let [id (m/my-id state)
-          game (:game state)
+          game (m/game state)
           adjacent-tavern 
           (->> real-moves
                (filter #(= :tavern
@@ -324,8 +324,7 @@
          (map #(enemy-mod-map game my-life %))
          (apply merge-with +))))
 
-
-(defn hero-one-oh-one 
+(defn combat-one-oh-one 
   "Basic close range combat:
 - avoid entering a E+2 square
 - prefer to enter a E+1 square if we can wind the combat (i.e. sufficiently more health) and the hero actually
@@ -360,3 +359,7 @@
                (some #{pos} spawns) [move -1]
                (some #(adjacent? (m/board game) pos %) spawns) [move (- ratio)]
                :else nil)))))))
+
+
+;; alpha-beta searching
+

@@ -9,8 +9,10 @@
         [clojure.core.match :only (match)]
         vindinium.bots))
 
-(def server-url "http://vindinium.org")
-(def secret-key (slurp "secret.key"))
+(def server-url (or (System/getProperty "server") "http://vindinium.org"))
+(def secret-key (.trim (slurp (or (System/getProperty "key") "secret.key"))))
+
+(println (str "Using server=" server-url ", with key=" secret-key))
 
 ;; Bots
 
@@ -34,14 +36,12 @@
            (.printStackTrace e)
            (rand-move)))))
 
-(def default-bot (fn [_] (rand-move)))
-
 (def current-bot 
   (bot (heuristic-agent
         (with-meta (autist-dfs-agent 7) {:label "autist-dfs" :weight 1})
         (with-meta (tavern-finder 30) {:label "tavern-finder" :weight 0.9})
         (with-meta (mine-finder 30) {:label "mine-finder" :weight 1})
-        (with-meta hero-one-oh-one {:label "combat" :weight 300})
+        (with-meta combat-one-oh-one {:label "combat" :weight 300})
         (with-meta (avoid-spawning-spots 0.1) {:label "spawn-avoider" :weight 0.1}))))
 
 ;; Server interaction

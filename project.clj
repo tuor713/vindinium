@@ -8,5 +8,6 @@
                  [cheshire "5.3.1"]
                  [slingshot "0.10.3"]
                  [org.clojure/core.match "0.2.1"]]
+  :jvm-opts ["-Dserver=http://localhost:9000" "-Dkey=bots/test.txt"]
   :main ^:skip-aot vindinium.core
   :profiles {:uberjar {:aot :all}})
