@@ -39,7 +39,7 @@
 (def current-bot 
   (bot (heuristic-agent
         (with-meta (tavern-finder 30) {:label "tavern-finder" :weight 0.9})
-        (with-meta (mine-finder 30) {:label "mine-finder" :weight 1})
+        (with-meta mine-finder {:label "mine-finder" :weight 1})
         (with-meta combat-one-oh-one {:label "combat" :weight 300})
         (with-meta (avoid-spawning-spots 0.1) {:label "spawn-avoider" :weight 0.1}))))
 

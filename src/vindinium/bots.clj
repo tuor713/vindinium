@@ -248,34 +248,54 @@
                      (into queue'
                            (map #(-> [% (conj p s)]) ns))))))))))
 
+(defn can-win? 
+  ([lifea lifeb]
+     (if (<= lifea 0) 
+       false
+       (not (can-win? (- lifeb 20) (max (dec lifea) 1)))))
+  ([my-life enemy-life first-strike?]
+     (if first-strike?
+       (not (can-win? (- enemy-life 20) (max (dec my-life) 1)))
+       (can-win? (- my-life 20) (max (dec enemy-life) 1)))))
+
 (defn enemy-mod-map [game my-life enemy]
   (let [enemy-pos (m/pos enemy)
+        enemy-life (m/life enemy)
         ns (neighbours (m/board game) enemy-pos)
-        ns2 (distinct (remove #{enemy-pos} (mapcat #(neighbours (m/board game) %) ns)))]
+        ns2 (distinct (remove #{enemy-pos} (mapcat #(neighbours (m/board game) %) ns)))
+        win-first? (can-win? my-life enemy-life true)
+        win-second? (can-win? (dec my-life) enemy-life false)]
     (->> (concat
-          ;; don't get into the +1 space on your own
-          (map #(-> [% -1]) ns2)
+
+          ;; only get into T+1 space if we can win even without first strike
+          ;; TODO this needs to be made tavern aware i.e. if the ns space is next to a tavern
+          ;; then don't get in there whatever
+          (map #(-> (if win-second? [% 0] [% -1])) ns2)
+          
           (cond
            (and (next-to-tavern? (m/board game) enemy-pos) 
-                (> (m/life enemy) 20))
+                (> enemy-life 20))
            (map #(-> [% -1]) ns)
 
            ;; we would loose even if we hit first
-           (<= (quot my-life 20) (dec (quot (m/life enemy) 20)))
+           (not win-first?)
            (map #(-> [% -1]) ns)
 
            ;; we would win and there is something to get, but do go for the kill just to get rid 
            ;; of annoying bots
            (or (> (m/mine-count enemy) 0) 
-               (<= (m/life enemy) 20))
+               (<= enemy-life 20))
            (map #(-> [% 0.5]) ns)
 
            ;; nothing to get, no preference ... to validate
            :else nil))
+
+         ;; if next to a tavern in an encouter situation prefer that
          (map (fn [[pos w]]
                 (if (and (> my-life 20) (next-to-tavern? (m/board game) pos))
                   [pos (max w 0)]
                   [pos w])))
+         
          (into {}))))
 
 (defn enemies-mod-map [game hero-id]
@@ -285,15 +305,17 @@
          (map #(enemy-mod-map game my-life %))
          (apply merge-with +))))
 
+(defn tavern-neighbours [board blacklist pos]
+  (->> real-moves 
+       (map #(pos+ pos %))
+       (remove #(let [tile (m/tile board %)]
+                  (or (contains? blacklist %) 
+                      (contains? #{nil :wall :hero} tile)
+                      (m/mine? tile))))))
+
 (defn path-to-tavern [board blacklist starting]
   (bfs starting
-       (fn [pos]
-         (->> real-moves 
-              (map #(pos+ pos %))
-              (remove #(let [tile (m/tile board %)]
-                         (or (contains? blacklist %) 
-                             (contains? #{nil :wall :hero} tile)
-                             (m/mine? tile))))))
+       (partial tavern-neighbours board blacklist)
        (fn [pos] (= :tavern (m/tile board pos)))))
 
 (defn tavern-finder [life-threshold]
@@ -311,42 +333,53 @@
         [[adjacent-tavern 20]]
         (when (<= (m/life game id) life-threshold)
           (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
-                path (path-to-tavern (m/board game) blacklist (m/pos game id))]
-            (when path (move->direction (m/pos game id) (second path)))))))))
+                adj-pos (tavern-neighbours (m/board game) blacklist (m/pos game id))
+                paths (keep #(path-to-tavern (m/board game) blacklist %) adj-pos)
+                min-len (when (seq paths) (apply min (map count paths)))
+                min-paths (filter #(= min-len (count %)) paths)]
+            (map 
+             #(-> [(move->direction (m/pos game id) (first %)) 1])
+             min-paths)))))))
+
+(defn mine-neighbours [board hero-id blacklist pos]
+  (->> real-moves
+       (map #(pos+ pos %))
+       (remove #(or (contains? blacklist %)
+                    (contains? #{nil :wall :hero :tavern [:mine hero-id]} (m/tile board %))))))
 
 (defn path-to-mine [board hero-id blacklist starting]
   (bfs starting
-       (fn [pos]
-         (->> real-moves
-              (map #(pos+ pos %))
-              (remove #(or (contains? blacklist %)
-                           (contains? #{nil :wall :hero :tavern [:mine hero-id]} (m/tile board %))))))
+       (partial mine-neighbours board hero-id blacklist)
        (fn [pos] (m/mine? (m/tile board pos)))))
 
-(defn mine-finder [life-threshold]
-  (fn [state]
-    (let [id (m/my-id state)
-          game (:game state)
+(defn mine-finder [state]
+  (let [id (m/my-id state)
+        game (:game state)
 
-          adjacent-mines
-          (->> real-moves
-               (filter #(let [tile (m/tile (m/board game) 
-                                           (pos+ (m/pos game id) %))]
-                          (and (m/mine? tile)
-                               (not= [:mine id] tile)))))]
-      (cond
-       (and (seq adjacent-mines) (> (m/life game id) 20))
-       [[(first adjacent-mines) 2]]
+        adjacent-mines
+        (->> real-moves
+             (filter #(let [tile (m/tile (m/board game) 
+                                         (pos+ (m/pos game id) %))]
+                        (and (m/mine? tile)
+                             (not= [:mine id] tile)))))]
+    (cond
+     (and (seq adjacent-mines) (> (m/life game id) 20))
+     [[(first adjacent-mines) 2]]
 
-       ;; don't run into mines on low life bad move
-       (and (seq adjacent-mines) (<= (m/life game id) 20))
-       (map #(-> [% -100]) adjacent-mines)
+     ;; don't run into mines on low life bad move
+     (and (seq adjacent-mines) (<= (m/life game id) 20))
+     (map #(-> [% -100]) adjacent-mines)
 
-       :else 
-       (when-not (< (m/life game id) life-threshold)
-         (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
-               path (path-to-mine (m/board game) id blacklist  (m/pos game id))]
-           (when path (move->direction (m/pos game id) (second path)))))))))
+     :else 
+     (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+           adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
+           paths (keep #(path-to-mine (m/board game) id blacklist %) adj-pos)
+           min-len (when (seq paths) (apply min (map count paths)))
+           min-paths (filter #(= min-len (count %)) paths)]
+       (when (<= min-len (- (m/life game id) 20))
+         (map 
+          #(-> [(move->direction (m/pos game id) (first %)) 1])
+          min-paths))))))
 
 
 

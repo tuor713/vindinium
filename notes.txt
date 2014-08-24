@@ -11,19 +11,20 @@ http://vindinium.org/ge1ccdij -> foolish death after reaching tavern ...
 
 Additions
 > Combat
-- don't be afraid to into T+1 space if we can still win
 - ensure that fields adjacent to taverns are treated preferentially
 - finishing off an opponent i.e. moving into the bad +2 square because the life difference is big enough
+- don't mine when in an enemy square unless you can still win
 
 > Meta
 - learn from death i.e. avoid death spots ?
 - avoid traps i.e. don't go into places where you can be cut off completely, especially if an enemy is very near
 
 > Path finding
-- allow alternative equivalent paths to mines and taverns, to enable finer grain optimizations
 - without DFS based mining, we greedily optimize the first mine but that is not really right
 
-
+> Planning
+- go to tavern nearest to next mine etc
+- go to mine nearest to mine thereafter etc
 
 
 Have a private Arena for running games with test agents ...
