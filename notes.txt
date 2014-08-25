@@ -21,10 +21,23 @@ Additions
 
 > Path finding
 - without DFS based mining, we greedily optimize the first mine but that is not really right
+- chained mining, i.e. compute the whole mining sequence until end of life and then execute the best one
+  (all DFS)
 
 > Planning
 - go to tavern nearest to next mine etc
 - go to mine nearest to mine thereafter etc
+
+
+> Heuristics
+- Tavern proximity: if in doubt stay closer to the nearest tavern, in particular when facing enemies
+- Enemy mine preference: should we prioritise taking mines from enemies? should we prioritise farming in areas
+  of low combat?
+
+
+> AB search
+- 100k n/s
+- 2 ply search tree with all bots counted in => pathetic
 
 
 Have a private Arena for running games with test agents ...

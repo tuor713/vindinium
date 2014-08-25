@@ -1,7 +1,8 @@
 (ns vindinium.core
   (:gen-class)
   (:require [clj-http.client :as http]
-            [vindinium.model :as m])
+            [vindinium.model :as m]
+            [vindinium.simulation :as sim])
   (:use [clojure.pprint :only [pprint]]
         [clojure.string :only [split]]
         [clojure.java.io :only [writer file]]
