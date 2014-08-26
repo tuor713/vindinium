@@ -91,6 +91,28 @@
                      (into queue'
                            (map #(-> [% (conj p s)]) ns))))))))))
 
+(defn board-env 
+  "Calculates the environment of reachable squares 
+- including mines and taverns, but excluding squares beyond them
+- including heros and squares beyond them"
+  ([board num-steps pos]
+     (board-env board num-steps pos false))
+  ([board num-steps pos last-generation-only?]
+     ((if last-generation-only? :last-cover :cover)
+      (reduce
+       (fn [{pos :positions cover :cover} _]
+         (let [npos (mapcat #(sim/neighbours board % (fn [t] (or (nil? t) (= :wall t)))) pos)]
+           {:cover (into cover npos)
+            :last-cover (set (remove cover npos))
+            :positions
+            (->> npos
+                 (remove #(let [t (m/tile board %)] (or (m/mine? t) (= :tavern t))))
+                 (remove cover)
+                 (distinct))}))
+       {:positions [pos]
+        :cover #{pos}}
+       (range num-steps)))))
+
 (defn can-win? 
   ;; internal call
   ([lifea lifeb]
@@ -189,42 +211,111 @@
 (defn mine-neighbours [board hero-id blacklist pos]
   (->> sim/real-moves
        (map #(sim/pos+ pos %))
-       (remove #(or (contains? blacklist %)
-                    (contains? #{nil :wall :hero :tavern [:mine hero-id]} (m/tile board %))))))
+       (remove #(let [tile (m/tile board %)]
+                  (or (contains? blacklist %)
+                      (contains? #{nil :wall :tavern [:mine hero-id]} tile)
+                      (and (m/hero? tile) (not= tile [:hero hero-id])))))))
 
 (defn path-to-mine [board hero-id blacklist starting]
   (bfs starting
        (partial mine-neighbours board hero-id blacklist)
        (fn [pos] (m/mine? (m/tile board pos)))))
 
+(def multi-path-max-depth 3)
+(def multi-path-cutoff 10)
+
+(defn path-to-mines [board hero-id life blacklist starting]
+  (let [neighbours (partial mine-neighbours board hero-id blacklist)]
+    ;; TODO extract exhaustive search pattern into a separate function
+    (loop [visited #{} 
+           queue [{:pos starting :life life :path []}] 
+           res []]
+      (if (empty? queue)
+        res
+        (let [{pos :pos life :life path :path :as state} (first queue)
+              queue' (subvec queue 1)]
+          (cond
+           (<= life 20) 
+           (recur visited queue' res)
+
+           (m/mine? (m/tile board pos))
+           (let [res' (conj res {:pos pos :life (- life 20) :path (conj path pos)})]
+             (if (>= (count res') multi-path-cutoff)
+               res'
+               (recur (conj visited pos) queue' res')))
+
+           (contains? visited pos) 
+           (recur visited queue' res)
+
+           :else
+           (let [ns (remove visited (neighbours pos))]
+             (recur (conj visited pos)
+                    (into queue' (map #(-> {:pos % :life (dec life) :path (conj path pos)}) ns))
+                    res))))))))
+
+(defn multi-path-to-mines 
+  ([board hero-id life blacklist starting]
+     (multi-path-to-mines board hero-id life blacklist starting 1))
+  ([board hero-id life blacklist starting depth]
+     (mapcat
+      #(let [{pos :pos life :life path :path} %
+             paths (when (< depth multi-path-max-depth) 
+                     (multi-path-to-mines board hero-id life (conj blacklist pos) (last (butlast path)) (inc depth)))]
+         (if (empty? paths)
+           [[path]]
+           (map
+            (fn [ps] (cons path ps))
+            paths)))
+      (path-to-mines board hero-id life blacklist starting))))
+
+(defn gold-predict [turns mining-path]
+  (:gold
+   (reduce
+    (fn [{turns :turns gold :gold} path]
+      (let [end-turn (- turns (dec (count path)))]
+        {:turns end-turn
+         :gold (+ gold (inc end-turn))}))
+    {:turns 20 :gold 0}
+    mining-path)))
+
+
+
 (defn mine-finder [state]
   (let [id (m/my-id state)
         game (:game state)
+        board (m/board game)
 
         adjacent-mines
-        (->> sim/real-moves
-             (filter #(let [tile (m/tile (m/board game) 
-                                         (sim/pos+ (m/pos game id) %))]
-                        (and (m/mine? tile)
-                             (not= [:mine id] tile)))))]
+        (filter #(m/mine? (m/tile board %)) 
+                (board-env board 1 (m/pos game id)))
+        enemies-near (filter #(let [t (m/tile board %)]
+                                   (and (m/hero? t) (not= t [:hero id])))
+                                (board-env board 2 (m/pos game id)))]
     (cond
-     (and (seq adjacent-mines) (> (m/life game id) 20))
-     [[(first adjacent-mines) 2]]
+     (and (seq adjacent-mines) 
+          (> (m/life game id) 20) 
+          (not (seq enemies-near)))
+     [[(sim/move->direction (m/pos game id) (first adjacent-mines)) 2]]
 
-     ;; don't run into mines on low life bad move
-     (and (seq adjacent-mines) (<= (m/life game id) 20))
-     (map #(-> [% -100]) adjacent-mines)
+     ;; life <= 20 or enemies are near
+     ;; either way don't do a mine just yet
+     (seq adjacent-mines) 
+     (map #(-> [(sim/move->direction (m/pos game id) %) -100]) adjacent-mines)
 
      :else 
      (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
            adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
-           paths (keep #(path-to-mine (m/board game) id blacklist %) adj-pos)
-           min-len (when (seq paths) (apply min (map count paths)))
-           min-paths (filter #(= min-len (count %)) paths)]
-       (when (<= min-len (- (m/life game id) 20))
-         (map 
-          #(-> [(sim/move->direction (m/pos game id) (first %)) 1])
-          min-paths))))))
+           paths (mapcat 
+                  #(multi-path-to-mines (m/board game) id (m/life game id) blacklist %)
+                  adj-pos)
+           
+           max-gold (when (seq paths) (apply max (map #(gold-predict 100 %) paths)))
+           max-paths (filter #(= max-gold (gold-predict 100 %)) paths)]
+       (println "mining debug:" max-gold max-paths)
+       (distinct
+        (map 
+         (fn [[path & _]] (-> [(sim/move->direction (m/pos game id) (first path)) 1]))
+         max-paths))))))
 
 
 

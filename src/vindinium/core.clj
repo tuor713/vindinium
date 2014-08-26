@@ -28,12 +28,12 @@
            (println (str "Agent took " (- end start) "ms"))
            (if (= res :timeout)
              (do 
-               (println "Bot timeout")
+               (println "SEVERE - Bot timeout")
                (future-cancel fut)
                (rand-move))
              (name res)))
          (catch Exception e
-           (println "Bot exception" e)
+           (println "SEVERE - Bot exception" e)
            (.printStackTrace e)
            (rand-move)))))
 

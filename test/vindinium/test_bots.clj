@@ -1,7 +1,25 @@
 (ns vindinium.test-bots
-  (:require [vindinium.model :as m])
+  (:require [vindinium.model :as m]
+            [vindinium.simulation :as sim])
   (:use clojure.test
         vindinium.bots))
+
+(deftest test-board-env
+  (let [b [[:empty :empty :empty :empty :empty]
+           [:empty :wall :empty [:hero 1] :empty]
+           [:empty :empty [:mine nil] :tavern :empty]
+           [:empty :empty :empty :empty :empty]
+           [:empty :empty :empty :empty :empty]]]
+    (is (= #{[0 2] [1 3] [2 2] [1 2]}
+           (board-env b 1 [1 2])))
+    (is (= #{[0 2] [1 3] [2 2]}
+           (board-env b 1 [1 2] true)))
+    (is (= #{[0 1] [0 3] [2 3] [1 4]}
+           (board-env b 2 [1 2] true)))
+    (is (= #{[0 1] [0 3] [2 3] [1 4] [1 2] [0 2] [1 3] [2 2]}
+           (board-env b 2 [1 2])))
+    (is (= #{[0 0] [0 4] [2 4]}
+           (board-env b 3 [1 2] true)))))
 
 (deftest test-tavern-finder
   (is (= [[0 0] [0 1] [0 2] [1 2] [2 2]]
@@ -51,12 +69,62 @@
 (deftest test-mine-finder
   (is (= [[0 0] [0 1] [0 2] [1 2] [2 2]]
          (path-to-mine 
-          [[:empty :empty :empty]
+          [[[:hero 1] :empty :empty]
            [:empty :wall :empty]
            [:empty :wall [:mine nil]]]
           1
           #{}
-          [0 0]))))
+          [0 0])))
+  
+  (let [board [[[:hero 1] :empty :empty]
+               [:empty :wall :empty]
+               [:empty :wall [:mine nil]]]]
+    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}}
+           (set (path-to-mines
+                 board 
+                 1 100 #{} [0 0]))))
+    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}}
+           (set (path-to-mines
+                 (m/tile= board [2 0] [:mine 1]) 
+                 1 100 #{} [0 0]))))
+    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}
+             {:pos [2 0], :life 78, :path [[0 0] [1 0] [2 0]]}}
+           (set (path-to-mines
+                 (m/tile= board [2 0] [:mine nil]) 
+                 1 100 #{} [0 0]))))
+    (is (empty?
+         (path-to-mines
+          (m/tile= board [2 2] :empty) 
+          1 100 #{} [0 0])))
+
+    (is (= [[[[0 0] [1 0] [2 0]] [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]] 
+            [[[0 0] [0 1] [0 2] [1 2] [2 2]] [[1 2] [0 2] [0 1] [0 0] [1 0] [2 0]]]]
+           (multi-path-to-mines
+            (m/tile= board [2 0] [:mine nil]) 
+            1 100 #{} [0 0])))
+    
+    (is (= (+ 19 14) 
+           (gold-predict 20 [[[0 0] [1 0] [2 0]] 
+                             [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]])))
+
+    (let [board [[[:hero 1] :empty :empty]
+                 [:empty :wall :empty]
+                 [[:mine nil] :wall [:mine nil]]]
+          g {:heroes {1 {:id 1 :pos [0 0] :mineCount 0 :life 100 :gold 0}}
+             :board board}
+          g' (sim/step g 1 :south)]
+      (is (= [[:south 1]]
+             (mine-finder {:hero {:id 1} :game g})))
+      (is (= [[:south 2]]
+             (mine-finder {:hero {:id 1} :game g'})))
+      (is (= [[:south -100]]
+             (mine-finder {:hero {:id 1} :game (assoc-in g' [:heroes 1 :life] 20)}))
+          "Don't attack a mine on <= life")
+      (is (= [[:south -100]]
+             (mine-finder {:hero {:id 1} :game (-> g'
+                                                   (assoc-in [:heroes 2] {:pos [1 1] :life 100})
+                                                   (assoc-in [:board 1 1] [:hero 2]))}))
+          "Don't attack a mine with enemies nearby"))))
 
 
 (deftest test-can-win

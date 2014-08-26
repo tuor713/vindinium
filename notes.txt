@@ -3,12 +3,6 @@ ideas for bots
   incentives are set according to health
 - conditional agent: alpha-beta for small crowded maps
 
-to review
-http://vindinium.org/wa0n8mca-> this could be done as strict alpha-beta
-http://vindinium.org/bvx6xpym -> some random deaths that should be preventable
-http://vindinium.org/u8sqpoeh -> non tavern behaviour
-http://vindinium.org/ge1ccdij -> foolish death after reaching tavern ...
-
 Additions
 > Combat
 - ensure that fields adjacent to taverns are treated preferentially
@@ -26,8 +20,8 @@ Additions
 
 > Planning
 - go to tavern nearest to next mine etc
-- go to mine nearest to mine thereafter etc
-
+- sometimes dependent on half-life time of mines held making strategic plans is not best :(
+- plan out full circle i.e. plan which tavern to go to after minig, plan which mine to go to after visiting tavern
 
 > Heuristics
 - Tavern proximity: if in doubt stay closer to the nearest tavern, in particular when facing enemies
@@ -40,9 +34,6 @@ Additions
 - 2 ply search tree with all bots counted in => pathetic
 
 
-Have a private Arena for running games with test agents ...
-- predefined maps that I played
-- set of agents (current malvert, random bot, stay bot, next malvert, etc) ... we'd have to take 
-  branches of the code to have the current bot exactly as is ...
-  maybe actually I will compile it into separate jars and have backups of agents in separate classloaders
-  ... mwahaha
+Games to review
+k3h2u2th (local) => very restrictive arena conquering and holding important, some crap deaths ?
+
