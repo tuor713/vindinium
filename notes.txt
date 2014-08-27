@@ -12,22 +12,19 @@ Additions
 > Meta
 - learn from death i.e. avoid death spots ?
 - avoid traps i.e. don't go into places where you can be cut off completely, especially if an enemy is very near
-
-> Path finding
-- without DFS based mining, we greedily optimize the first mine but that is not really right
-- chained mining, i.e. compute the whole mining sequence until end of life and then execute the best one
-  (all DFS)
+- avoid mining clashes where two bots take and re-take a mine
+- avoid being trailed by another bot stealing my mines
 
 > Planning
 - go to tavern nearest to next mine etc
 - sometimes dependent on half-life time of mines held making strategic plans is not best :(
-- plan out full circle i.e. plan which tavern to go to after minig, plan which mine to go to after visiting tavern
+- plan out full circle i.e. plan which tavern to go to after mining, plan which mine to go to after visiting tavern
+- go into territory least claimed by other bots (large maps)
 
 > Heuristics
 - Tavern proximity: if in doubt stay closer to the nearest tavern, in particular when facing enemies
 - Enemy mine preference: should we prioritise taking mines from enemies? should we prioritise farming in areas
   of low combat?
-
 
 > AB search
 - 100k n/s

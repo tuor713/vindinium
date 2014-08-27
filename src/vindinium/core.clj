@@ -89,7 +89,7 @@
 (defn step [logger bot from]
   (loop [input from]
     (binding [*out* logger] (println (pr-str input))) 
-    (println "Turn" (m/turn (m/game input)))
+    (println "Turn" (m/turn (m/game input)) "-" (:hero input))
     (let [next (request (:playUrl input) {:dir (bot input)})]
       (if (:finished (:game next)) (println "") (recur next)))))
 
@@ -112,7 +112,7 @@
              _ (p "Waiting for pairing...")
              input (request (str server-url "/api/arena") {:key secret-key})]
          (p (str "Starting arena game " (:viewUrl input)))
-         (try (with-open [os (writer (file "arena" (str (last (split (:viewUrl input) #"/")) ".txt")))]
+         (try (with-open [os (writer (file "arena" (str (last (split (:viewUrl input) #"/")) "." (m/my-id input) ".txt")))]
                 (step os bot input))
               (catch Exception e
                 (p (str "Errored out: " e))

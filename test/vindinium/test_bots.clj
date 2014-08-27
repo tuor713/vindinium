@@ -21,6 +21,23 @@
     (is (= #{[0 0] [0 4] [2 4]}
            (board-env b 3 [1 2] true)))))
 
+(deftest test-shortest-path
+  (let [b [[:empty [:hero 1] :empty :wall :empty]
+           [:empty [:mine nil] [:mine nil] :tavern :empty]
+           [:empty :empty :empty :empty :empty]
+           [:empty :wall :wall :wall :wall]
+           [:empty :empty [:mine nil] :empty :empty]]]
+    (is (nil? (shortest-path b [0 0] [4 4])))
+    (is (= [[0 0] [1 0] [2 0] [2 1] [2 2] [2 3] [2 4] [1 4] [0 4]]
+           (shortest-path b [0 0] [0 4])))
+    (is (= [[0 0] [0 1] [0 2]]
+           (shortest-path b [0 0] [0 2])))
+    (is (nil? (shortest-path b #(and (not= % [0 1]) (passable? b %)) 
+                             [0 0] [0 2])))
+    (is (= [[0 0] [1 0] [2 0] [3 0] [4 0] [4 1] [4 2]]
+           (shortest-path b [0 0] [4 2])))))
+
+
 (deftest test-tavern-finder
   (is (= [[0 0] [0 1] [0 2] [1 2] [2 2]]
          (path-to-tavern 
@@ -103,30 +120,88 @@
             (m/tile= board [2 0] [:mine nil]) 
             1 100 #{} [0 0])))
     
+    )
+
+  (testing "gold predict"
     (is (= (+ 19 14) 
            (gold-predict 20 [[[0 0] [1 0] [2 0]] 
-                             [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]])))
+                             [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]]))))
 
-    (let [board [[[:hero 1] :empty :empty]
-                 [:empty :wall :empty]
-                 [[:mine nil] :wall [:mine nil]]]
-          g {:heroes {1 {:id 1 :pos [0 0] :mineCount 0 :life 100 :gold 0}}
-             :board board}
-          g' (sim/step g 1 :south)]
-      (is (= [[:south 1]]
-             (mine-finder {:hero {:id 1} :game g})))
-      (is (= [[:south 2]]
-             (mine-finder {:hero {:id 1} :game g'})))
-      (is (= [[:north 1]]
-             (mine-finder {:hero {:id 1} :game (assoc-in g' [:board 2 0] [:mine 1])})))
-      (is (= [[:south -100]]
-             (mine-finder {:hero {:id 1} :game (assoc-in g' [:heroes 1 :life] 20)}))
-          "Don't attack a mine on <= life")
-      (is (= [[:south -100]]
-             (mine-finder {:hero {:id 1} :game (-> g'
-                                                   (assoc-in [:heroes 2] {:pos [1 1] :life 100})
-                                                   (assoc-in [:board 1 1] [:hero 2]))}))
-          "Don't attack a mine with enemies nearby"))))
+  (testing "full path search"
+    (is (= {:complete true
+            :results [[[[0 0] [1 0] [2 0] [3 0]]
+                       [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
+                       [[2 3] [1 3] [0 3] [0 2] [0 1]]]
+                      [[[0 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
+                       [[2 3] [1 3] [1 2] [1 1] [1 0] [2 0] [3 0]]
+                       [[2 0] [1 0] [0 0] [0 1]]]]}
+         (full-path-search
+          10
+          [[[:hero 1] :tavern :empty :empty]
+           [:empty :empty :empty :empty]
+           [:empty :wall :wall :empty]
+           [[:mine nil] :wall :wall [:mine nil]]]
+          1 100 #{} [0 0]))
+        "Vanilla case get all results that can be produced")
+    (is (= {:complete true
+            :results [[[[0 0] [1 0] [2 0] [3 0]]
+                       [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
+                       [[2 3] [1 3] [0 3] [0 2] [0 1]]]]}
+           (full-path-search
+            1
+            [[[:hero 1] :tavern :empty :empty]
+             [:empty :empty :empty :empty]
+             [:empty :wall :wall :empty]
+             [[:mine nil] :wall :wall [:mine nil]]]
+            1 100 #{} [0 0]))
+        "Only first (best) result")
+    (is (= {:complete true
+            :results [[[[0 0] [1 0] [2 0] [3 0]]
+                       [[2 0] [1 0] [1 1] [1 2] [2 2] [2 3] [3 3]]
+                       [[2 3] [2 4]]]]}
+           (full-path-search
+            1
+            [[[:hero 1] :tavern :empty :empty :empty]
+             [:empty :empty :empty :empty :empty]
+             [:empty :wall :empty :empty :tavern]
+             [[:mine nil] :wall :empty [:mine nil] :empty]]
+            1 100 #{} [0 0]))
+        "Case where mining position matters for best access to next tavern")
+    (is (= {:complete false
+            :results 
+            [[[[0 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]] 
+              [[2 3] [1 3] [1 2] [1 1] [1 0] [2 0] [3 0]]] 
+             [[[0 0] [1 0] [2 0] [3 0]]
+              [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]]]}
+           (full-path-search
+            1
+            [[[:hero 1] :wall :empty :empty]
+             [:empty :empty :empty :empty]
+             [:empty :wall :wall :empty]
+             [[:mine nil] :wall :wall [:mine nil]]]
+            1 100 #{} [0 0]))
+        "No tavern case"))
+
+  (let [board [[[:hero 1] :empty :empty :tavern]
+               [:empty :wall :empty :empty]
+               [[:mine nil] :wall [:mine nil] :empty]]
+        g {:heroes {1 {:id 1 :pos [0 0] :mineCount 0 :life 100 :gold 0}}
+           :board board}
+        g' (sim/step g 1 :south)]
+    (is (= [[:south 1]]
+           (mine-finder {:hero {:id 1} :game g})))
+    (is (= [[:south 2]]
+           (mine-finder {:hero {:id 1} :game g'})))
+    (is (= [[:north 1]]
+           (mine-finder {:hero {:id 1} :game (assoc-in g' [:board 2 0] [:mine 1])})))
+    (is (= [[:south -100]]
+           (mine-finder {:hero {:id 1} :game (assoc-in g' [:heroes 1 :life] 20)}))
+        "Don't attack a mine on <= life")
+    (is (= [[:south -100]]
+           (mine-finder {:hero {:id 1} :game (-> g'
+                                                 (assoc-in [:heroes 2] {:pos [1 1] :life 100})
+                                                 (assoc-in [:board 1 1] [:hero 2]))}))
+        "Don't attack a mine with enemies nearby")))
 
 
 (deftest test-can-win
