@@ -117,6 +117,8 @@
              (mine-finder {:hero {:id 1} :game g})))
       (is (= [[:south 2]]
              (mine-finder {:hero {:id 1} :game g'})))
+      (is (= [[:north 1]]
+             (mine-finder {:hero {:id 1} :game (assoc-in g' [:board 2 0] [:mine 1])})))
       (is (= [[:south -100]]
              (mine-finder {:hero {:id 1} :game (assoc-in g' [:heroes 1 :life] 20)}))
           "Don't attack a mine on <= life")

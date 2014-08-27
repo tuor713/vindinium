@@ -286,7 +286,7 @@
         board (m/board game)
 
         adjacent-mines
-        (filter #(m/mine? (m/tile board %)) 
+        (filter #(let [t (m/tile board %)] (and (m/mine? t) (not= t [:mine id]))) 
                 (board-env board 1 (m/pos game id)))
         enemies-near (filter #(let [t (m/tile board %)]
                                    (and (m/hero? t) (not= t [:hero id])))
