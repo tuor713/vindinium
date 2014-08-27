@@ -262,53 +262,6 @@
        (partial mine-neighbours board hero-id blacklist)
        (fn [pos] (m/mine? (m/tile board pos)))))
 
-(def multi-path-max-depth 3)
-(def multi-path-cutoff 10)
-
-(defn path-to-mines [board hero-id life blacklist starting]
-  (let [neighbours (partial mine-neighbours board hero-id blacklist)]
-    ;; TODO extract exhaustive search pattern into a separate function
-    (loop [visited #{} 
-           queue [{:pos starting :life life :path []}] 
-           res []]
-      (if (empty? queue)
-        res
-        (let [{pos :pos life :life path :path :as state} (first queue)
-              queue' (subvec queue 1)]
-          (cond
-           (<= life 20) 
-           (recur visited queue' res)
-
-           (m/mine? (m/tile board pos))
-           (let [res' (conj res {:pos pos :life (- life 20) :path (conj path pos)})]
-             (if (>= (count res') multi-path-cutoff)
-               res'
-               (recur (conj visited pos) queue' res')))
-
-           (contains? visited pos) 
-           (recur visited queue' res)
-
-           :else
-           (let [ns (remove visited (neighbours pos))]
-             (recur (conj visited pos)
-                    (into queue' (map #(-> {:pos % :life (dec life) :path (conj path pos)}) ns))
-                    res))))))))
-
-(defn multi-path-to-mines 
-  ([board hero-id life blacklist starting]
-     (multi-path-to-mines board hero-id life blacklist starting 1))
-  ([board hero-id life blacklist starting depth]
-     (mapcat
-      #(let [{pos :pos life :life path :path} %
-             paths (when (< depth multi-path-max-depth) 
-                     (multi-path-to-mines board hero-id life (conj blacklist pos) (last (butlast path)) (inc depth)))]
-         (if (empty? paths)
-           [[path]]
-           (map
-            (fn [ps] (cons path ps))
-            paths)))
-      (path-to-mines board hero-id life blacklist starting))))
-
 ;; TODO deal with cases where the tavern is blocked
 (defn full-path-search
   [max-result board hero-id life blacklist starting]

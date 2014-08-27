@@ -93,35 +93,6 @@
           #{}
           [0 0])))
   
-  (let [board [[[:hero 1] :empty :empty]
-               [:empty :wall :empty]
-               [:empty :wall [:mine nil]]]]
-    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}}
-           (set (path-to-mines
-                 board 
-                 1 100 #{} [0 0]))))
-    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}}
-           (set (path-to-mines
-                 (m/tile= board [2 0] [:mine 1]) 
-                 1 100 #{} [0 0]))))
-    (is (= #{{:pos [2 2], :life 76, :path [[0 0] [0 1] [0 2] [1 2] [2 2]]}
-             {:pos [2 0], :life 78, :path [[0 0] [1 0] [2 0]]}}
-           (set (path-to-mines
-                 (m/tile= board [2 0] [:mine nil]) 
-                 1 100 #{} [0 0]))))
-    (is (empty?
-         (path-to-mines
-          (m/tile= board [2 2] :empty) 
-          1 100 #{} [0 0])))
-
-    (is (= [[[[0 0] [1 0] [2 0]] [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]] 
-            [[[0 0] [0 1] [0 2] [1 2] [2 2]] [[1 2] [0 2] [0 1] [0 0] [1 0] [2 0]]]]
-           (multi-path-to-mines
-            (m/tile= board [2 0] [:mine nil]) 
-            1 100 #{} [0 0])))
-    
-    )
-
   (testing "gold predict"
     (is (= (+ 19 14) 
            (gold-predict 20 [[[0 0] [1 0] [2 0]] 
