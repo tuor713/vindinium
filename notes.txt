@@ -5,13 +5,10 @@ ideas for bots
 
 Additions
 > Combat
-- ensure that fields adjacent to taverns are treated preferentially
 - finishing off an opponent i.e. moving into the bad +2 square because the life difference is big enough
-- don't mine when in an enemy square unless you can still win
+- avoid death spots
 
 > Meta
-- learn from death i.e. avoid death spots ?
-- avoid traps i.e. don't go into places where you can be cut off completely, especially if an enemy is very near
 - avoid mining clashes where two bots take and re-take a mine
 - avoid being trailed by another bot stealing my mines
 
@@ -20,11 +17,24 @@ Additions
 - sometimes dependent on half-life time of mines held making strategic plans is not best :(
 - plan out full circle i.e. plan which tavern to go to after mining, plan which mine to go to after visiting tavern
 - go into territory least claimed by other bots (large maps)
+- Efficiency: 
+  ? use planning as generation of shortest path strips to generate routes (as opposed to blind search)
+  ? cache planning results in the same turn
+  ? cache planning over turns
 
 > Heuristics
 - Tavern proximity: if in doubt stay closer to the nearest tavern, in particular when facing enemies
 - Enemy mine preference: should we prioritise taking mines from enemies? should we prioritise farming in areas
   of low combat?
+
+> Gammas
+- how to combine advanced cross heuristics such as avoiding mining in dead spots when opponents are near (death spot (combat), mining)
+- mining under fire (combat, mining)
+
+> Strategic
+- territorial behaviour i.e. claim a set of mines and defend them ? (check that gold production is winning)
+
+
 
 > AB search
 - 100k n/s

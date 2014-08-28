@@ -37,6 +37,22 @@
     (is (= [[0 0] [1 0] [2 0] [3 0] [4 0] [4 1] [4 2]]
            (shortest-path b [0 0] [4 2])))))
 
+(deftest test-reachables
+  (let [b [[:empty [:hero 1] :empty :wall :empty]
+           [:empty [:mine nil] [:mine nil] :tavern :empty]
+           [:empty :empty :empty :empty :empty]
+           [:empty :wall :wall :wall :wall]
+           [:empty :empty [:mine nil] :empty [:mine nil]]]]
+    (is (= #{[1 1] [1 2] [4 2]}
+           (reachables b #(m/mine? (m/tile b %)) [0 0])))
+    (is (= #{[4 2] [4 4]}
+           (reachables b #(m/mine? (m/tile b %)) [4 3])))
+    (is (= #{[1 1] [1 2]}
+           (reachables b #(m/mine? (m/tile b %)) 
+                       #(and (passable? b %) (not= % [3 0]))
+                       [0 0])))))
+
+
 
 (deftest test-tavern-finder
   (is (= [[0 0] [0 1] [0 2] [1 2] [2 2]]
@@ -146,6 +162,38 @@
               [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]]]}
            (full-path-search
             1
+            [[[:hero 1] :wall :empty :empty]
+             [:empty :empty :empty :empty]
+             [:empty :wall :wall :empty]
+             [[:mine nil] :wall :wall [:mine nil]]]
+            1 100 #{} [0 0]))
+        "No tavern case"))
+
+  (testing "harvest path search"
+    (is (= [[[0 0] [1 0] [2 0] [3 0]]
+            [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
+            [[2 3] [1 3] [0 3] [0 2] [0 1]]]
+           (harvest-path-search 
+            [[[:hero 1] :tavern :empty :empty]
+             [:empty :empty :empty :empty]
+             [:empty :wall :wall :empty]
+             [[:mine nil] :wall :wall [:mine nil]]]
+            1 100 #{} [0 0]))
+        "Vanilla case get all results that can be produced")
+    (is (= [[[0 0] [1 0] [2 0] [3 0]]
+            [[2 0] [1 0] [1 1] [1 2] [2 2] [2 3] [3 3]]
+            [[2 3] [2 4]]]
+           (harvest-path-search
+            [[[:hero 1] :tavern :empty :wall :empty]
+             [:empty :empty :empty :wall :empty]
+             [:empty :wall :empty :empty :tavern]
+             [[:mine nil] :wall :empty [:mine nil] :empty]]
+            1 100 #{} [0 0]))
+        "Case where mining position matters for best access to next tavern")
+    (is (= [[[0 0] [1 0] [2 0] [3 0]] 
+            [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]] 
+            [[2 3]]]
+           (harvest-path-search
             [[[:hero 1] :wall :empty :empty]
              [:empty :empty :empty :empty]
              [:empty :wall :wall :empty]

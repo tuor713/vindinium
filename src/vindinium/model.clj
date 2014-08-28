@@ -41,7 +41,9 @@
 (defn turn [game] (:turn game))
 
 (defn mine? [tile] (and (vector? tile) (= :mine (first tile))))
+(defn enemy-mine? [id tile] (and (mine? tile) (not= [:mine id] tile)))
 (defn hero? [tile] (and (vector? tile) (= :hero (first tile))))
+(defn enemy-hero? [id tile] (and (hero? tile) (not= [:hero id] tile)))
 
 (defn my-id [state] (get-in state [:hero :id]))
 (defn game [state] (:game state))
