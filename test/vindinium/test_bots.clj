@@ -114,61 +114,6 @@
            (gold-predict 20 [[[0 0] [1 0] [2 0]] 
                              [[1 0] [0 0] [0 1] [0 2] [1 2] [2 2]]]))))
 
-  (testing "full path search"
-    (is (= {:complete true
-            :results [[[[0 0] [1 0] [2 0] [3 0]]
-                       [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
-                       [[2 3] [1 3] [0 3] [0 2] [0 1]]]
-                      [[[0 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
-                       [[2 3] [1 3] [1 2] [1 1] [1 0] [2 0] [3 0]]
-                       [[2 0] [1 0] [0 0] [0 1]]]]}
-         (full-path-search
-          10
-          [[[:hero 1] :tavern :empty :empty]
-           [:empty :empty :empty :empty]
-           [:empty :wall :wall :empty]
-           [[:mine nil] :wall :wall [:mine nil]]]
-          1 100 #{} [0 0]))
-        "Vanilla case get all results that can be produced")
-    (is (= {:complete true
-            :results [[[[0 0] [1 0] [2 0] [3 0]]
-                       [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]
-                       [[2 3] [1 3] [0 3] [0 2] [0 1]]]]}
-           (full-path-search
-            1
-            [[[:hero 1] :tavern :empty :empty]
-             [:empty :empty :empty :empty]
-             [:empty :wall :wall :empty]
-             [[:mine nil] :wall :wall [:mine nil]]]
-            1 100 #{} [0 0]))
-        "Only first (best) result")
-    (is (= {:complete true
-            :results [[[[0 0] [1 0] [2 0] [3 0]]
-                       [[2 0] [1 0] [1 1] [1 2] [2 2] [2 3] [3 3]]
-                       [[2 3] [2 4]]]]}
-           (full-path-search
-            1
-            [[[:hero 1] :tavern :empty :empty :empty]
-             [:empty :empty :empty :empty :empty]
-             [:empty :wall :empty :empty :tavern]
-             [[:mine nil] :wall :empty [:mine nil] :empty]]
-            1 100 #{} [0 0]))
-        "Case where mining position matters for best access to next tavern")
-    (is (= {:complete false
-            :results 
-            [[[[0 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]] 
-              [[2 3] [1 3] [1 2] [1 1] [1 0] [2 0] [3 0]]] 
-             [[[0 0] [1 0] [2 0] [3 0]]
-              [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]]]}
-           (full-path-search
-            1
-            [[[:hero 1] :wall :empty :empty]
-             [:empty :empty :empty :empty]
-             [:empty :wall :wall :empty]
-             [[:mine nil] :wall :wall [:mine nil]]]
-            1 100 #{} [0 0]))
-        "No tavern case"))
-
   (testing "harvest path search"
     (is (= [[[0 0] [1 0] [2 0] [3 0]]
             [[2 0] [1 0] [1 1] [1 2] [1 3] [2 3] [3 3]]

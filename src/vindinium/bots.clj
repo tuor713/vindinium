@@ -78,16 +78,18 @@
   ([neighbourhood distance cost start]
      (a*-search #(= 0 (distance %)) neighbourhood distance cost start))
   ([success? neighbourhood distance cost start]
-     (loop [visited #{} queue (priority-map [start [start]] (distance start))]
-       (when (seq queue)
+     (loop [visited #{} queue (priority-map [start [start]] (distance start)) counter 0]
+       (if (seq queue)
          (let [[[state path] _] (first queue)
                queue' (dissoc queue [state path])]
            (cond
             (success? state) 
-            path
+            (do
+              #_(println "A* search:" counter "nodes, result:" path)
+              path)
             
             (contains? visited state)
-            (recur visited queue')
+            (recur visited queue' (inc counter))
 
             :else
             (let [ns (remove visited (neighbourhood state))
@@ -95,7 +97,9 @@
                                 (map 
                                  #(-> [[% (conj path %)] (+ (cost (conj path %)) (distance %))])
                                  ns))]
-              (recur (conj visited state) queue''))))))))
+              (recur (conj visited state) queue'' (inc counter)))))
+         (do #_(println "A* search:" counter "nodes, no result")
+             nil)))))
 
 (defn shortest-path
   ([board start end]
@@ -267,27 +271,20 @@
        (fn [pos] (m/mine? (m/tile board pos)))))
 
 
-;; there ought to be a way we can do this as A* search ?
-;; needs to factor in
-;; - gold production achieved so far
-;; - steps taken
-;; - distance to goal
-
-;; proposal 
-;; score = distance (manhattan distance back to nearest tavern)
-;;         + cost(5 * distance travelled - gold produced) => at least 1 unit for each step, prefer paths with gold production
-;; extensible by adding in further weights on the path as long as cost >= 1
-
 (defn harvest-path-search
+  "Mining path search based on A* search. This is not very efficient A* search by any means.
+- Distance to goal is estimated (crudely) by the manhattan distance to nearest tavern to close out (or 1 if there are no taverns)
+- Distance travelled takes into account gold produced to favour paths of high produce (5 - no of active mines)."
   [board hero-id life blacklist starting]
   (let [taverns (reachables board 
                             #(= :tavern (m/tile board %))
                             #(and (not (blacklist %)) (passable? board %))
                             starting)
-        no-reachable-mines (count (reachables board 
+        reachable-mines (reachables board 
                                     #(m/enemy-mine? hero-id (m/tile board %))
                                     #(and (not (blacklist %)) (passable? board %))
-                                    starting))
+                                    starting)
+        no-reachable-mines (count reachable-mines)
         return-state (atom {:started #{} :forbidden #{}})
         result (a*-search
                 ;; success criterion
@@ -346,10 +343,14 @@
                 
                 ;; distance estimate: steps to close out at a tavern
                 (fn [state] 
-                  (->> taverns
-                       (map #(manhattan-distance (:pos state) %))
-                       (cons 1)
-                       (apply min)))
+                  (let [mine-count (count (:mines state))
+                        mult (- 5 mine-count)]
+                    (if (not (empty? taverns))
+                      (->> taverns
+                           (map #(* 1 (manhattan-distance (:pos state) %)))
+                           (cons 1)
+                           (apply min))
+                      1)))
 
                 ;; cost
                 (fn [path] (:cost (meta (last path))))
@@ -366,111 +367,6 @@
       (:paths (meta (last result))))))
 
 
-(defn full-path-search
-  [max-result board hero-id life blacklist starting]
-  (let [n (partial mine-neighbours board hero-id blacklist)
-        n2 (partial tavern-neighbours board blacklist)]
-    (loop [visited-map {{:segments [] :returning? false} #{}}
-           closed-segments #{}
-           queue [{:pos starting :life life :path [] :segments [] :returning? false}] 
-           res []]
-      (if (empty? queue)
-        (if (seq res)
-          {:complete true :results res}
-          (let [max-segs (apply max (map #(count (:segments %)) (keys visited-map)))]
-            (if (> max-segs 0)
-              {:complete false :results (->> (keys visited-map)
-                                             (map :segments)
-                                             (filter #(= max-segs (count %))))}
-              {:complete false :results nil})))
-        (let [{pos :pos 
-               life :life 
-               path :path 
-               segments :segments 
-               returning? :returning? 
-               :as state} (first queue)
-              queue' (subvec queue 1)
-              visited-key {:segments segments :returning? returning?}
-              visited (get visited-map visited-key #{})]
-          (if returning?
-            (cond
-             (contains? closed-segments segments)
-             (recur visited-map closed-segments queue' res)
-
-             (= :tavern (m/tile board pos))
-             (let [res' (conj res (conj segments (conj path pos)))]
-               (if (>= (count res') max-result)
-                 {:complete true :results res'}
-                 (recur (assoc visited-map visited-key (conj visited pos))
-                        (conj closed-segments segments)
-                        queue' 
-                        res')))
-
-             (contains? visited pos)
-             (recur visited-map closed-segments queue' res)
-
-             :else
-             (let [ns (remove visited (n2 pos))]
-               (recur 
-                (assoc visited-map visited-key (conj visited pos))
-                closed-segments
-                (into queue'
-                      (map
-                       #(-> {:pos %
-                             :path (conj path pos)
-                             :segments segments
-                             :visited (conj visited pos)
-                             :returning? true})
-                       ns))
-                res)))
-
-            (cond
-             (or (<= life 20) (contains? visited pos)) 
-             (recur visited-map closed-segments queue' res)
-
-             (m/mine? (m/tile board pos))
-             (let [path' (conj path pos)
-                   segments' (conj segments path')
-
-                   next-closest (path-to-mine board hero-id (into blacklist (map last segments')) (last path))
-                   can-find-mine? 
-                   (and (seq next-closest)
-                        (<= (dec (count next-closest)) (- life 41)))
-
-                   state' {:pos (last path)
-                           :life (- life 21) 
-                           :path []
-                           :segments segments'
-                           :returning? false}]
-               (if can-find-mine?
-                 (recur 
-                  ;; don't update the mine position in the old map 
-                  ;; since we may approach the same mine gainfully from more than one position
-                  ;; bootstrap new visited map with all the mines already used, so there is no double counting
-                  (assoc visited-map {:segments segments' :returning? false} 
-                         (set (map last segments')))
-                  closed-segments
-                  (conj queue' state') 
-                  res)
-                 (recur
-                  (assoc visited-map {:segments segments' :returning? true} #{})
-                  closed-segments
-                  (conj queue' (assoc state' :returning? true))
-                  res)))
-
-             :else
-             (let [ns (remove visited (n pos))]
-               (recur 
-                (assoc visited-map visited-key (conj visited pos))
-                closed-segments
-                (into queue' 
-                      (map #(-> {:pos % 
-                                 :life (dec life) 
-                                 :path (conj path pos) 
-                                 :segments segments 
-                                 :returning? false}) ns))
-                      res)))))))))
-
 (defn gold-predict [turns mining-path]
   (:gold
    (reduce
@@ -478,71 +374,53 @@
       (let [end-turn (- turns (dec (count path)))]
         {:turns end-turn
          :gold (+ gold (inc end-turn))}))
-    {:turns 20 :gold 0}
+    {:turns turns :gold 0}
     mining-path)))
 
-(defn mine-path-fitness [segments]
-  (+ (gold-predict 100 (butlast segments))
-     ;; todo the divisor is somewhat arbitrary
-     (- (/ (count (last segments)) 3.0))))
-
 (defn mine-finder 
-  ([state] (mine-finder 10 state))
-  ([top-n-cutoff state]
-     (let [id (m/my-id state)
-           game (m/game state)
-           board (m/board game)
+  [state] 
+  (let [id (m/my-id state)
+        game (m/game state)
+        board (m/board game)
 
-           adjacent-mines
-           (filter #(m/enemy-mine? id (m/tile board %))
-                   (board-env board 1 (m/pos game id)))
-           enemies-near 
-           (filter #(m/enemy-hero? id (m/tile board %))
-                   (board-env board 2 (m/pos game id)))]
-       (cond
-        (and (seq adjacent-mines) 
-             (> (m/life game id) 20) 
-             (not (seq enemies-near)))
-        [[(sim/move->direction (m/pos game id) (first adjacent-mines)) 2]]
+        adjacent-mines
+        (filter #(m/enemy-mine? id (m/tile board %))
+                (board-env board 1 (m/pos game id)))
+        enemies-near 
+        (filter #(m/enemy-hero? id (m/tile board %))
+                (board-env board 2 (m/pos game id)))]
+    (cond
+     (and (seq adjacent-mines) 
+          (> (m/life game id) 20) 
+          (not (seq enemies-near)))
+     [[(sim/move->direction (m/pos game id) (first adjacent-mines)) 2]]
 
-        ;; life <= 20 or enemies are near
-        ;; either way don't do a mine just yet
-        (seq adjacent-mines) 
-        (map #(-> [(sim/move->direction (m/pos game id) %) -100]) adjacent-mines)
+     ;; life <= 20 or enemies are near
+     ;; either way don't do a mine just yet
+     (seq adjacent-mines) 
+     (map #(-> [(sim/move->direction (m/pos game id) %) -100]) adjacent-mines)
 
-        :else 
-        (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
-              adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
+     :else 
+     (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+           adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
 
-              #_(
-                 paths 
-                 (let [{complete? :complete paths :results} 
-                       (full-path-search top-n-cutoff (m/board game) id (m/life game id) blacklist (m/pos game id))]
-                   (if complete?
-                     paths
-                     (map (fn [p] (conj p [])) paths)))
-                 
-                 max-fitness (when (seq paths) (apply max (map #(mine-path-fitness %) paths)))
-                 max-paths (filter #(= max-fitness (mine-path-fitness %)) paths)
-                 _ (println "mining debug:" max-fitness (count paths) max-paths))
-
-              max-paths [(harvest-path-search (m/board game) id (m/life game id) blacklist (m/pos game id))]
-              _ (println "mining debug:" max-paths)]
-          (->> max-paths
-               (map first)
-               (mapcat 
-                (fn [path]
-                  (let [ps (map #(shortest-path board 
-                                                (fn [pos] (and (passable? board pos)
-                                                               (not (contains? blacklist pos))
-                                                               (not (m/enemy-hero? id (m/tile board pos)))))
-                                                ;; search for the penultimate spot so we end up with the same 
-                                                % (last (butlast path)))
-                                adj-pos)
-                        min-len (apply min (map count ps))]
-                    (map first (filter #(= min-len (count %)) ps)))))
-               (distinct)
-               (map #(-> [(sim/move->direction (m/pos game id) %) 1]))))))))
+           max-paths [(harvest-path-search (m/board game) id (m/life game id) blacklist (m/pos game id))]
+           _ (println "mining debug:" max-paths)]
+       (->> max-paths
+            (map first)
+            (mapcat 
+             (fn [path]
+               (let [ps (map #(shortest-path board 
+                                             (fn [pos] (and (passable? board pos)
+                                                            (not (contains? blacklist pos))
+                                                            (not (m/enemy-hero? id (m/tile board pos)))))
+                                             ;; search for the penultimate spot so we end up with the same 
+                                             % (last (butlast path)))
+                             adj-pos)
+                     min-len (apply min (map count ps))]
+                 (map first (filter #(= min-len (count %)) ps)))))
+            (distinct)
+            (map #(-> [(sim/move->direction (m/pos game id) %) 1])))))))
 
 
 
