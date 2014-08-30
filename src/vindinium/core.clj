@@ -37,11 +37,12 @@
            (.printStackTrace e)
            (rand-move)))))
 
-(def current-bot 
+(defn current-bot []
   (bot (heuristic-agent
         (with-meta (tavern-finder 30) {:label "tavern-finder" :weight 0.9})
         (with-meta mine-finder {:label "mine-finder" :weight 1})
         (with-meta combat-one-oh-one {:label "combat" :weight 300})
+        (with-meta (trap-avoidance -0.5 -0.1) {:label "trap avoidance" :weight 1})
         (with-meta (avoid-spawning-spots 0.1) {:label "spawn-avoider" :weight 0.1}))))
 
 ;; Server interaction
@@ -95,7 +96,7 @@
 
 (defn training 
   ([secret-key turns]
-     (training secret-key turns current-bot))
+     (training secret-key turns (current-bot)))
   ([secret-key turns bot]
      (let [input (request (str server-url "/api/training") {:key secret-key :turns turns})]
        (println (str "Starting training game " (:viewUrl input)))
@@ -105,7 +106,7 @@
 
 (defn arena 
   ([secret-key games]
-     (arena secret-key games current-bot))
+     (arena secret-key games (current-bot)))
   ([secret-key games bot]
      (loop [it 1]
        (let [p #(println (str "[" it "/" games "] " %))

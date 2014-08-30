@@ -10,7 +10,7 @@
    :stay [0 0]})
 
 (def move-options (vec (keys moves)))
-(def real-moves [:north :south :east :west])
+(def real-moves [:north :east :south :west])
 
 (defn pos+ [[x y] dir]
   (let [[dx dy] (moves dir)]
@@ -28,7 +28,7 @@
      :else [x y])))
 
 (defn valid-moves [board pos]
-  (filter (partial valid-move? board pos) [:north :south :east :west]))
+  (filter (partial valid-move? board pos) real-moves))
 
 (defn adjacent? [board pos otherpos]
   (some #{otherpos} (map #(pos+ pos %) real-moves)))
@@ -104,7 +104,7 @@
                    (update-in [:heroes foe-id :life] #(- % 20)))))
            g)))
      game
-     [:north :south :west :east])))
+     real-moves)))
 
 (defn end-of-turn [game hero-id]
   (update-in game

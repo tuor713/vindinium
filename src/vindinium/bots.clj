@@ -1,6 +1,7 @@
 (ns vindinium.bots
   (:require [vindinium.model :as m]
-            [vindinium.simulation :as sim])
+            [vindinium.simulation :as sim]
+            [clojure.set :as set])
   (:use clojure.data.priority-map))
 
 (set! *warn-on-reflection* true)
@@ -67,12 +68,14 @@
   (+ (Math/abs (- xx x))
      (Math/abs (- yy y))))
 
-(defn passable? [board pos]
-  (let [t (m/tile board pos)]
-    (not (or (= nil t)
-             (= :wall t)
-             (= :tavern t)
-             (m/mine? t)))))
+(defn passable? 
+  ([board pos]
+     (passable? (m/tile board pos)))
+  ([tile]
+     (not (or (= nil tile)
+              (= :wall tile)
+              (= :tavern tile)
+              (m/mine? tile)))))
 
 (defn a*-search 
   ([neighbourhood distance cost start]
@@ -246,7 +249,7 @@
                (first))]
       ;; if we are adjacent give a little push so we actually use it
       (if (and adjacent-tavern (<= (m/life game id) 75))
-        [[adjacent-tavern 20]]
+        [[adjacent-tavern 10]]
         (when (<= (m/life game id) life-threshold)
           (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
                 adj-pos (tavern-neighbours (m/board game) blacklist (m/pos game id))
@@ -393,7 +396,7 @@
      (and (seq adjacent-mines) 
           (> (m/life game id) 20) 
           (not (seq enemies-near)))
-     [[(sim/move->direction (m/pos game id) (first adjacent-mines)) 2]]
+     [[(sim/move->direction (m/pos game id) (first adjacent-mines)) 15]]
 
      ;; life <= 20 or enemies are near
      ;; either way don't do a mine just yet
@@ -423,7 +426,6 @@
             (map #(-> [(sim/move->direction (m/pos game id) %) 1])))))))
 
 
-
 (defn combat-one-oh-one 
   "Basic close range combat:
 - avoid entering a E+2 square
@@ -446,6 +448,7 @@
          (remove (fn [[move mod]]
                    (and (< mod 0) (= (m/mine-count game id) 0)))))))
 
+
 (defn avoid-spawning-spots [ratio]
   (fn [input]
     (let [game (m/game input)
@@ -460,6 +463,113 @@
               (cond
                (some #{pos} spawns) [move -1]
                (some #(sim/adjacent? (m/board game) pos %) spawns) [move (- ratio)]
+               :else nil)))))))
+
+(defn find-traps 
+  "Traps are spaces where a determined opponent operating out of a T+2 position can successfully chase us
+down and force a fight eventually by taking the T+1 position and forcing us ever more into a corner until
+there are no further ways out and encounter ensues.
+
+Generally an empty board is completely a trap. Non-trap spaces are created by circular path ways round an obstacle like a mine or tavern
+or spaces that are linked to a tavern providing a haven of safety we can reach.
+
+Some spaces can be directional traps depending on opponents and player position, for example a tavern on the opponents row/column makes 
+our row/column safe as long as we are ahead in the direction of the tavern. In the reverse direction the tavern does not help us."
+  [board]
+  (let [rows (count board)
+        cols (count (first board))
+
+        all-locs (set (for [c (range cols) r (range rows)] [r c]))
+        walls (set (filter #(not (passable? board %)) all-locs))
+
+        unsafe? 
+        (fn [pos unsafes semi-unsafes]
+          (let [ns (->> sim/real-moves
+                        (map #(sim/pos+ pos %)))]
+            (and
+             (not (some #(= :tavern (m/tile board %)) ns))
+             (or (= 3 (count (filter #(or (not (passable? board %)) (contains? unsafes %)) ns)))
+                 (some
+                  (fn [[left mid right]]
+                    (let [left (sim/pos+ pos left)
+                          right (sim/pos+ pos right)
+                          mid (sim/pos+ pos mid)]
+                      (and (or (not (passable? board left)) (contains? unsafes left) 
+                               (contains? semi-unsafes left))
+                           (or (not (passable? board right)) (contains? unsafes right) 
+                               (contains? semi-unsafes right))
+                           (or (not (passable? board mid)) (contains? unsafes mid))
+                           (if (= (:parent (meta (semi-unsafes pos))) pos)
+                             (and                            
+                              (not= (:parent (meta (semi-unsafes left)))
+                                    (:parent (meta (semi-unsafes pos))))
+                              (not= (:parent (meta (semi-unsafes right)))
+                                    (:parent (meta (semi-unsafes pos)))))
+                             (not= (:parent (meta (semi-unsafes left)))
+                                   (:parent (meta (semi-unsafes right))))))))
+                  [[:north :east :south]
+                   [:east :south :west]
+                   [:south :west :north]
+                   [:west :north :east]])))))
+
+        parent-semi-unsafe
+        (fn [pos unsafes semi-unsafes]
+          (let [ns (->> sim/real-moves
+                        (map #(sim/pos+ pos %)))]
+            (and
+             (not (some #(= :tavern (m/tile board %)) ns))
+             (some 
+              (fn [[blockedA blockedB dirA dirB]]
+                (let [nA (sim/pos+ pos blockedA)
+                      nB (sim/pos+ pos blockedB)]
+                  (when (and (or (not (passable? board nA)) (contains? semi-unsafes nA))
+                             (or (not (passable? board nB)) (contains? semi-unsafes nB))
+                             ;; one must be a wall at least
+                             (not (and (contains? semi-unsafes nA) (contains? semi-unsafes nB)))
+                             (passable? board (sim/pos+ (sim/pos+ pos dirA) dirB)))
+                    (or (:parent (meta (semi-unsafes nA)))
+                        (:parent (meta (semi-unsafes nB)))
+                        pos))))
+              [[:north :east :south :west] 
+               [:east :south :north :west]
+               [:south :west :north :east]
+               [:west :north :south :east]]))))]
+    (loop [unsafes #{} semi-unsafes #{} queue all-locs]
+      (if (empty? queue)
+        {:unsafe unsafes :semi-unsafe semi-unsafes}
+        (let [it (first queue)
+              queue' (disj queue it)
+              ns (->> sim/real-moves (map #(sim/pos+ it %)))]
+          (cond
+           (not (passable? board it)) (recur unsafes semi-unsafes queue')
+           (contains? unsafes it) (recur unsafes semi-unsafes queue')
+           (contains? semi-unsafes it)
+           (if (unsafe? it unsafes semi-unsafes)
+             (recur (conj unsafes it) (disj semi-unsafes it)
+                    (into queue' ns))
+             (recur unsafes semi-unsafes queue'))
+
+           (unsafe? it unsafes semi-unsafes)
+           (recur (conj unsafes it) semi-unsafes (into queue' ns))
+
+           :else
+           (if-let [parent (parent-semi-unsafe it unsafes semi-unsafes)]
+             (recur unsafes (conj semi-unsafes (with-meta it {:parent parent})) (into queue' ns))
+             (recur unsafes semi-unsafes queue'))))))))
+
+(defn trap-avoidance [trap-value semi-trap-value]
+  (fn [input]
+    (let [game (m/game input)
+          my-id (m/my-id input)
+          {unsafe :unsafe semi-unsafe :semi-unsafe} (find-traps (m/board game))]
+      (->> sim/move-options
+           (keep #(if-let [g' (sim/step game my-id %)]
+                    (-> [% (m/pos g' my-id)])))
+           (keep 
+            (fn [[move pos]]
+              (cond
+               (contains? unsafe pos) [move trap-value]
+               (contains? semi-unsafe pos) [move semi-trap-value]
                :else nil)))))))
 
 

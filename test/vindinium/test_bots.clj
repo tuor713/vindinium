@@ -154,7 +154,7 @@
         g' (sim/step g 1 :south)]
     (is (= [[:south 1]]
            (mine-finder {:hero {:id 1} :game g})))
-    (is (= [[:south 2]]
+    (is (= [[:south 15]]
            (mine-finder {:hero {:id 1} :game g'})))
     (is (= [[:north 1]]
            (mine-finder {:hero {:id 1} :game (assoc-in g' [:board 2 0] [:mine 1])})))
@@ -237,3 +237,57 @@
   (deftest test-avoid-spawning
     (is (= #{[:east -1] [:north -0.1] [:stay -0.1] [:west -0.1]} 
            (set (sut s))))))
+
+(deftest test-find-traps
+  (is (= {:unsafe #{[0 0] [0 1] [0 3]} :semi-unsafe #{}}
+         (find-traps [[:empty :empty :wall :empty]
+                      [:empty :empty :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :empty :empty :empty]]))
+      "Vanilla case")
+  (is (= {:unsafe #{[0 3]} :semi-unsafe #{}}
+         (find-traps [[:empty :tavern :wall :empty]
+                      [:empty :empty :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :empty :empty :empty]]))
+      "Tavern handling")
+
+  (is (= {:unsafe #{[2 2]} :semi-unsafe #{}}
+         (find-traps [[:empty :empty :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :wall :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :empty :empty :empty]]))
+      "Canonical trap in inner wall")
+
+  (is (= {:unsafe #{} :semi-unsafe #{[1 2] [2 2] [0 3] [1 3]}}
+         (find-traps [[:empty :empty :empty :empty]
+                      [:empty :wall :empty :empty]
+                      [:empty :wall :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :empty :empty :empty]]))
+      "Non-canonical trap in inner wall")
+
+  (is (= {:unsafe #{[0 1] [1 0] [1 1] [1 2] [2 0] [3 0] [4 0] [5 0] [5 1]} :semi-unsafe #{}}
+         (find-traps [[:wall :empty :wall :wall :wall]
+                      [:empty :empty :empty :wall :wall]
+                      [:empty :wall :wall :wall :wall]
+                      [:empty :wall :empty :empty :empty]
+                      [:empty :wall :empty :wall :empty]
+                      [:empty :empty :empty :empty :empty]]))
+      "Unsafe trough")
+
+  (is (= {:unsafe #{} :semi-unsafe #{}}
+         (find-traps [[:empty :empty :empty :wall]
+                      [:empty :wall :empty :wall]
+                      [:empty :wall :empty :empty]
+                      [:empty :wall :wall :empty]
+                      [:empty :empty :empty :empty]]))
+      "Round about safetly")
+
+(is (= {:unsafe #{[0 1] [0 3] [0 4] [0 5] [0 6] [0 7] [0 8] [0 10]} :semi-unsafe #{}}
+         (find-traps [[:wall :empty :wall :empty :empty :empty :empty :empty :empty :wall :empty :wall]
+                      [:empty :empty :empty :empty :empty :empty :empty :empty :empty :empty :empty :empty]
+                      [:empty :wall :empty :empty :empty :empty :empty :empty :empty :empty :wall :empty]
+                      [:empty :empty :empty :empty :empty :empty :empty :empty :empty :empty :empty :empty]]))
+      "Round about safetly"))

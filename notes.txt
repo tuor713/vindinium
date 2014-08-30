@@ -7,6 +7,8 @@ Additions
 > Combat
 - finishing off an opponent i.e. moving into the bad +2 square because the life difference is big enough
 - avoid death spots
+  - add a higher multiplier if an enemy is actually near (say T+1 or T+2 spot)
+  - make a force field of dead ends vectors rather than naive unsafe, semi-unsafe classification
 
 > Meta
 - avoid mining clashes where two bots take and re-take a mine
