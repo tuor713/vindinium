@@ -465,112 +465,118 @@
                (some #(sim/adjacent? (m/board game) pos %) spawns) [move (- ratio)]
                :else nil)))))))
 
-(defn find-traps 
-  "Traps are spaces where a determined opponent operating out of a T+2 position can successfully chase us
-down and force a fight eventually by taking the T+1 position and forcing us ever more into a corner until
-there are no further ways out and encounter ensues.
 
-Generally an empty board is completely a trap. Non-trap spaces are created by circular path ways round an obstacle like a mine or tavern
-or spaces that are linked to a tavern providing a haven of safety we can reach.
 
-Some spaces can be directional traps depending on opponents and player position, for example a tavern on the opponents row/column makes 
-our row/column safe as long as we are ahead in the direction of the tavern. In the reverse direction the tavern does not help us."
+;; Alternative approach to traps: hunting force field
+;; - The idea is that trapped squares contain indications of the directions in which they are trapped
+;; - Not only will this be more accurate representation of trappings (and less errorprone calculation hopefully)
+;; - Also it will be useful for implementing fleeing and hunting behaviours (moving against or following
+;;   the lines of the force field respectively)
+
+(defn update-forces [board forces pos]
+  (let [ns (->> sim/real-moves
+                (map #(-> [% (sim/pos+ pos %)])))
+        dir-set (set sim/real-moves)
+        op-dirs {:north :south, :west :east, :south :north, :east :west}
+
+        p?
+        (fn [p blocked-dirs]
+          (and (passable? board p)
+               (not
+                (set/subset? blocked-dirs (forces p)))))
+
+        blocked-dirs
+        (some
+         (fn [[adir bdir cdir]]
+           (let [[apos bpos cpos] (map #(sim/pos+ pos %) [adir bdir cdir])]
+             (when (and (not (p? apos #{adir bdir}))
+                        (not (p? bpos #{adir bdir cdir}))
+                        (not (p? cpos #{bdir cdir})))
+               [adir bdir cdir])))
+         [[:north :east :south]
+          [:east :south :west]
+          [:south :west :north]
+          [:west :north :east]])]
+    (cond
+     (some #(= :tavern (m/tile board (second %))) ns)
+     nil
+
+     blocked-dirs
+     (set blocked-dirs)
+     
+     :else
+     (if-let [blocked-dirs
+              (first
+               (filter
+                (fn [[adir bdir]]
+                  (let [[odir pdir] (seq (set/difference dir-set #{adir bdir}))
+                        apos (sim/pos+ pos adir)
+                        bpos (sim/pos+ pos bdir)
+                        opposite (-> pos (sim/pos+ odir) (sim/pos+ pdir))]
+                    (and (passable? board opposite)
+                         (not (p? apos #{adir bdir}))
+                         (not (p? bpos #{adir bdir})))))
+                [[:north :east] 
+                 [:east :south]
+                 [:south :west]
+                 [:west :north]]))]
+       (set blocked-dirs)))))
+
+(defn hunting-force-field 
   [board]
   (let [rows (count board)
         cols (count (first board))
 
         all-locs (set (for [c (range cols) r (range rows)] [r c]))
-        walls (set (filter #(not (passable? board %)) all-locs))
-
-        unsafe? 
-        (fn [pos unsafes semi-unsafes]
-          (let [ns (->> sim/real-moves
-                        (map #(sim/pos+ pos %)))]
-            (and
-             (not (some #(= :tavern (m/tile board %)) ns))
-             (or (= 3 (count (filter #(or (not (passable? board %)) (contains? unsafes %)) ns)))
-                 (some
-                  (fn [[left mid right]]
-                    (let [left (sim/pos+ pos left)
-                          right (sim/pos+ pos right)
-                          mid (sim/pos+ pos mid)]
-                      (and (or (not (passable? board left)) (contains? unsafes left) 
-                               (contains? semi-unsafes left))
-                           (or (not (passable? board right)) (contains? unsafes right) 
-                               (contains? semi-unsafes right))
-                           (or (not (passable? board mid)) (contains? unsafes mid))
-                           (if (= (:parent (meta (semi-unsafes pos))) pos)
-                             (and                            
-                              (not= (:parent (meta (semi-unsafes left)))
-                                    (:parent (meta (semi-unsafes pos))))
-                              (not= (:parent (meta (semi-unsafes right)))
-                                    (:parent (meta (semi-unsafes pos)))))
-                             (not= (:parent (meta (semi-unsafes left)))
-                                   (:parent (meta (semi-unsafes right))))))))
-                  [[:north :east :south]
-                   [:east :south :west]
-                   [:south :west :north]
-                   [:west :north :east]])))))
-
-        parent-semi-unsafe
-        (fn [pos unsafes semi-unsafes]
-          (let [ns (->> sim/real-moves
-                        (map #(sim/pos+ pos %)))]
-            (and
-             (not (some #(= :tavern (m/tile board %)) ns))
-             (some 
-              (fn [[blockedA blockedB dirA dirB]]
-                (let [nA (sim/pos+ pos blockedA)
-                      nB (sim/pos+ pos blockedB)]
-                  (when (and (or (not (passable? board nA)) (contains? semi-unsafes nA))
-                             (or (not (passable? board nB)) (contains? semi-unsafes nB))
-                             ;; one must be a wall at least
-                             (not (and (contains? semi-unsafes nA) (contains? semi-unsafes nB)))
-                             (passable? board (sim/pos+ (sim/pos+ pos dirA) dirB)))
-                    (or (:parent (meta (semi-unsafes nA)))
-                        (:parent (meta (semi-unsafes nB)))
-                        pos))))
-              [[:north :east :south :west] 
-               [:east :south :north :west]
-               [:south :west :north :east]
-               [:west :north :south :east]]))))]
-    (loop [unsafes #{} semi-unsafes #{} queue all-locs]
+        walls (set (filter #(not (passable? board %)) all-locs))]
+    (loop [forces {} queue (set/difference all-locs walls)]
       (if (empty? queue)
-        {:unsafe unsafes :semi-unsafe semi-unsafes}
+        forces
         (let [it (first queue)
               queue' (disj queue it)
-              ns (->> sim/real-moves (map #(sim/pos+ it %)))]
-          (cond
-           (not (passable? board it)) (recur unsafes semi-unsafes queue')
-           (contains? unsafes it) (recur unsafes semi-unsafes queue')
-           (contains? semi-unsafes it)
-           (if (unsafe? it unsafes semi-unsafes)
-             (recur (conj unsafes it) (disj semi-unsafes it)
-                    (into queue' ns))
-             (recur unsafes semi-unsafes queue'))
+              force (forces it)
+              force' (update-forces board forces it)]
+          (if (= force force')
+            (recur forces queue')
+            (let [ns (->> sim/real-moves
+                          (map #(sim/pos+ it %))
+                          (filter #(passable? board %)))]
+              (recur (assoc forces it force')
+                     (into queue' ns)))))))))
 
-           (unsafe? it unsafes semi-unsafes)
-           (recur (conj unsafes it) semi-unsafes (into queue' ns))
+(defn find-traps 
+  "A simplification of the hunting map to highlight 
+- places generally to be avoided (i.e. locked in three directions)
+- places mostly to be avoided (i.e. locked in two directions)"
+  [board]
+  (let [forces (hunting-force-field board)]
+    {:unsafe (set (map key (filter #(= 3 (count (val %))) forces)))
+     :semi-unsafe (set (map key (filter #(= 2 (count (val %))) forces)))}))
 
-           :else
-           (if-let [parent (parent-semi-unsafe it unsafes semi-unsafes)]
-             (recur unsafes (conj semi-unsafes (with-meta it {:parent parent})) (into queue' ns))
-             (recur unsafes semi-unsafes queue'))))))))
 
 (defn trap-avoidance [trap-value semi-trap-value]
-  (fn [input]
-    (let [game (m/game input)
-          my-id (m/my-id input)
-          {unsafe :unsafe semi-unsafe :semi-unsafe} (find-traps (m/board game))]
-      (->> sim/move-options
-           (keep #(if-let [g' (sim/step game my-id %)]
-                    (-> [% (m/pos g' my-id)])))
-           (keep 
-            (fn [[move pos]]
-              (cond
-               (contains? unsafe pos) [move trap-value]
-               (contains? semi-unsafe pos) [move semi-trap-value]
-               :else nil)))))))
+  (let [cached-find-traps (memoize find-traps)]
+    (fn [input]
+      (let [game (m/game input)
+            my-id (m/my-id input)
+
+            board-wo-heroes
+            (reduce
+             (fn [b h]
+               (assoc-in b (m/pos h) :empty))
+             (m/board game)
+             (m/heroes game))
+            
+            {unsafe :unsafe semi-unsafe :semi-unsafe} (cached-find-traps board-wo-heroes)]
+        (->> sim/move-options
+             (keep #(if-let [g' (sim/step game my-id %)]
+                      (-> [% (m/pos g' my-id)])))
+             (keep 
+              (fn [[move pos]]
+                (cond
+                 (contains? unsafe pos) [move trap-value]
+                 (contains? semi-unsafe pos) [move semi-trap-value]
+                 :else nil))))))))
 
 
 ;; alpha-beta searching
