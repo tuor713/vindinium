@@ -407,7 +407,8 @@
      (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
            adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
 
-           max-paths [(harvest-path-search (m/board game) id (m/life game id) blacklist (m/pos game id))]
+           path (harvest-path-search (m/board game) id (m/life game id) blacklist (m/pos game id))
+           max-paths (when path [path])
            _ (println "mining debug:" max-paths)]
        (->> max-paths
             (map first)
@@ -421,7 +422,6 @@
                                              % (last (butlast path)))
                              adj-pos)
                      min-len (apply min (map count ps))]
-                 (println ps min-len)
                  (map first (filter #(= min-len (count %)) ps)))))
             (distinct)
             (map #(-> [(sim/move->direction (m/pos game id) %) 1])))))))
