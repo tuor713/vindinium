@@ -413,7 +413,7 @@
             (map first)
             (mapcat 
              (fn [path]
-               (let [ps (map #(shortest-path board 
+               (let [ps (keep #(shortest-path board 
                                              (fn [pos] (and (passable? board pos)
                                                             (not (contains? blacklist pos))
                                                             (not (m/enemy-hero? id (m/tile board pos)))))
@@ -421,6 +421,7 @@
                                              % (last (butlast path)))
                              adj-pos)
                      min-len (apply min (map count ps))]
+                 (println ps min-len)
                  (map first (filter #(= min-len (count %)) ps)))))
             (distinct)
             (map #(-> [(sim/move->direction (m/pos game id) %) 1])))))))
