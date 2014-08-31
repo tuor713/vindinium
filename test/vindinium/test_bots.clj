@@ -165,7 +165,19 @@
            (mine-finder {:hero {:id 1} :game (-> g'
                                                  (assoc-in [:heroes 2] {:pos [1 1] :life 100})
                                                  (assoc-in [:board 1 1] [:hero 2]))}))
-        "Don't attack a mine with enemies nearby")))
+        "Don't attack a mine with enemies nearby")
+
+    (is (=  [[:east 1]]
+            (mine-finder
+             {:hero {:id 1}
+              :game {:board 
+                     [[[:hero 2] :empty :empty :empty :empty]
+                      [:empty :empty :empty :empty :empty]
+                      [[:mine 2] :empty [:hero 1] :empty :empty]
+                      [:empty :wall :wall :wall :empty]
+                      [:empty :empty :empty :empty [:mine nil]]]
+                     :heroes {1 {:id 1 :name "malvert" :pos [2 2] :life 100 :mineCount 0}
+                              2 {:id 2 :name "malvert" :pos [0 0] :life 100 :mineCount 1}}}})))))
 
 
 (deftest test-can-win

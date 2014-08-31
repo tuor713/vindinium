@@ -285,7 +285,7 @@
                             starting)
         _ (println "Reachable taverns: " taverns)
         reachable-mines (reachables board 
-                                    #(m/enemy-mine? hero-id (m/tile board %))
+                                    #(and (not (blacklist %)) (m/enemy-mine? hero-id (m/tile board %)))
                                     #(and (not (blacklist %)) (passable? board %))
                                     starting)
         no-reachable-mines (count reachable-mines)
@@ -406,7 +406,18 @@
      (map #(-> [(sim/move->direction (m/pos game id) %) -100]) adjacent-mines)
 
      :else 
-     (let [blacklist (set (map key (filter #(< (val %) 0) (enemies-mod-map game id))))
+     (let [my-name (m/hero-name game id)
+           friendly-heroes (set (map m/id (filter #(and (= (m/hero-name %) my-name) (not= (m/id %) id)) (m/heroes game))))
+
+           friendly-mines 
+           (for [c (range (count (first board))) r (range (count board))
+                 :when (let [t (m/tile board r c)]
+                         (and (m/mine? t) (contains? friendly-heroes (second t))))] 
+             [r c])
+
+           blacklist (set (concat (map key (filter #(< (val %) 0) (enemies-mod-map game id)))
+                                  friendly-mines))
+
            adj-pos (mine-neighbours (m/board game) id blacklist (m/pos game id))
 
            path (harvest-path-search (m/board game) id (m/life game id) blacklist (m/pos game id))
@@ -581,6 +592,18 @@
                  (contains? semi-unsafe pos) [move semi-trap-value]
                  :else nil))))))))
 
-
-;; alpha-beta searching
-
+(defn movement-premium 
+  [input]
+  (let [game (m/game input)
+        my-id (m/my-id input)
+        board (m/board game)]
+    (->> sim/move-options
+         (keep #(if-let [g' (sim/step game my-id %)]
+                  (-> [% (m/pos g' my-id)])))
+         (keep 
+          (fn [[move pos]]
+            [move (->> sim/real-moves 
+                       (map #(sim/pos+ pos %)) 
+                       (filter #(= :empty (m/tile board %)))
+                       (count))]
+            )))))

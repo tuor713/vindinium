@@ -3,6 +3,13 @@ ideas for bots
   incentives are set according to health
 - conditional agent: alpha-beta for small crowded maps
 
+Challenges
+- How to deal with Zahoom/cbX type players who have multiple bots colluding ?
+
+Multi-player meta
+- Prefer taking mines from highest gold player
+- Avoid taking mines from "malvert" player
+
 Additions
 > Combat
 - finishing off an opponent i.e. moving into the bad +2 square because the life difference is big enough

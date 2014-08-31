@@ -43,7 +43,8 @@
         (with-meta mine-finder {:label "mine-finder" :weight 1})
         (with-meta combat-one-oh-one {:label "combat" :weight 300})
         (with-meta (trap-avoidance -0.5 -0.1) {:label "trap avoidance" :weight 1})
-        (with-meta (avoid-spawning-spots 0.1) {:label "spawn-avoider" :weight 0.1}))))
+        (with-meta (avoid-spawning-spots 0.1) {:label "spawn-avoider" :weight 0.1})
+        (with-meta movement-premium {:label "movement premium" :weight 0.01}))))
 
 ;; Server interaction
 

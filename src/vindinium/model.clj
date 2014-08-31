@@ -23,6 +23,7 @@
 (def-hero-accessor :pos)
 (def-hero-accessor :gold)
 (def-hero-accessor :life)
+(def-hero-accessor :name hero-name)
 (def-hero-accessor :spawnPos spawn-pos)
 (def-hero-accessor :mineCount mine-count)
 
