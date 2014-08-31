@@ -283,6 +283,7 @@
                             #(= :tavern (m/tile board %))
                             #(and (not (blacklist %)) (passable? board %))
                             starting)
+        _ (println "Reachable taverns: " taverns)
         reachable-mines (reachables board 
                                     #(m/enemy-mine? hero-id (m/tile board %))
                                     #(and (not (blacklist %)) (passable? board %))
@@ -313,7 +314,8 @@
 
                      (<= life 20) ;; mining, but out of life, check whether we have started search for a return already
                      (when-not (or (contains? (:forbidden @return-state) mines)
-                                   (contains? (:started @return-state) mines))
+                                   (contains? (:started @return-state) mines)
+                                   (empty? mines))
                        (swap! return-state update-in [:started] conj mines)
                        ;; reset us to the place just after the last mine
                        [(with-meta {:pos (first (last paths)) :mines mines :returning? true}
